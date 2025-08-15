@@ -3015,8 +3015,19 @@ class NamedTupleMeta(type):
                         raise
 
         if Generic in bases:
-            nm_tpl.__init_subclass__()
+            Generic.__dict__["__init_subclass__"](nm_tpl)
+        nm_tpl.__init_subclass__ = classmethod(_deprecation_warning_namedtuple_subclassing_disallowed)
         return nm_tpl
+
+
+def _deprecation_warning_namedtuple_subclassing_disallowed(cls):
+    import warnings
+    depr_message = (
+        f"Subclassing NamedTuple classes is deprecated. "
+        f"It will be disallowed in Python 3.20."
+    )
+    warnings.warn(depr_message, category=DeprecationWarning, stacklevel=2)
+
 
 
 def NamedTuple(typename, fields, /):

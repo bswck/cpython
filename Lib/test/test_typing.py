@@ -8400,6 +8400,19 @@ class NamedTupleTests(BaseTestCase):
                 def name(self):
                     return __class__.__name__
 
+    def test_subclassing_deprecation(self):
+        class Base(NamedTuple):
+            pass
+
+        expected_message = (
+            "Subclassing NamedTuple classes is deprecated. "
+            "It will be disallowed in Python 3.20."
+        )
+
+        with self.assertWarns(DeprecationWarning, msg=expected_message):
+            class Sub(Base):
+                pass
+
 
 class TypedDictTests(BaseTestCase):
     def test_basics_functional_syntax(self):
