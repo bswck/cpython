@@ -3015,8 +3015,13 @@ class NamedTupleMeta(type):
                         raise
 
         if Generic in bases:
-            nm_tpl.__init_subclass__()
+            Generic.__dict__["__init_subclass__"](nm_tpl)
+        nm_tpl.__init_subclass__ = classmethod(_raise_NamedTuple_final)
         return nm_tpl
+
+
+def _raise_NamedTuple_final(cls):
+    raise TypeError("NamedTuple classes cannot be subclassed")
 
 
 def NamedTuple(typename, fields, /):

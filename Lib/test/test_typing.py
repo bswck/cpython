@@ -8400,6 +8400,14 @@ class NamedTupleTests(BaseTestCase):
                 def name(self):
                     return __class__.__name__
 
+    def test_subclassing_disallowed(self):
+        class Base(NamedTuple):
+            pass
+
+        with self.assertRaises(TypeError, msg="NamedTuple classes cannot be subclassed"):
+            class Sub(Base):
+                pass
+
 
 class TypedDictTests(BaseTestCase):
     def test_basics_functional_syntax(self):
