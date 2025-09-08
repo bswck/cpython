@@ -1013,6 +1013,7 @@ gen_new_with_qualname(PyTypeObject *type, PyFrameObject *f,
     assert(PyObject_GC_IsTracked((PyObject *)f));
     Py_DECREF(f);
     gen->gi_weakreflist = NULL;
+    gen->gi_debugging_extra_items = NULL;
     gen->gi_exc_state.exc_value = NULL;
     gen->gi_exc_state.previous_item = NULL;
     if (name != NULL)

@@ -56,7 +56,7 @@ struct _PyInterpreterFrame {
 
 /* _PyGenObject_HEAD defines the initial segment of generator
    and coroutine objects. */
-#define _PyGenObject_HEAD(prefix)                                           \
+#define _PyGenObject_HEAD(Self, prefix)                                     \
     PyObject_HEAD                                                           \
     /* List of weak reference. */                                           \
     PyObject *prefix##_weakreflist;                                         \
@@ -66,6 +66,7 @@ struct _PyInterpreterFrame {
     PyObject *prefix##_qualname;                                            \
     _PyErr_StackItem prefix##_exc_state;                                    \
     PyObject *prefix##_origin_or_finalizer;                                 \
+    struct Self *prefix##_debugging_extra_items;                            \
     char prefix##_hooks_inited;                                             \
     char prefix##_closed;                                                   \
     char prefix##_running_async;                                            \
@@ -75,15 +76,15 @@ struct _PyInterpreterFrame {
 
 struct _PyGenObject {
     /* The gi_ prefix is intended to remind of generator-iterator. */
-    _PyGenObject_HEAD(gi)
+    _PyGenObject_HEAD(_PyGenObject, gi)
 };
 
 struct _PyCoroObject {
-    _PyGenObject_HEAD(cr)
+    _PyGenObject_HEAD(_PyCoroObject, cr)
 };
 
 struct _PyAsyncGenObject {
-    _PyGenObject_HEAD(ag)
+    _PyGenObject_HEAD(_PyAsyncGenObject, ag)
 };
 
 #undef _PyGenObject_HEAD
