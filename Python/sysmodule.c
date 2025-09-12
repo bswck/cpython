@@ -19,6 +19,7 @@ Data members:
 #include "pycore_call.h"          // _PyObject_CallNoArgs()
 #include "pycore_ceval.h"         // _PyEval_SetAsyncGenFinalizer()
 #include "pycore_frame.h"         // _PyInterpreterFrame
+#include "pycore_genobject.h"     // _PyGen_SetDebuggingExtraItems
 #include "pycore_import.h"        // _PyImport_SetDLOpenFlags()
 #include "pycore_initconfig.h"    // _PyStatus_EXCEPTION()
 #include "pycore_interpframe.h"   // _PyFrame_GetFirstComplete()
@@ -1905,6 +1906,37 @@ sys_get_int_max_str_digits_impl(PyObject *module)
     return PyLong_FromLong(interp->long_state.max_str_digits);
 }
 
+/*[clinic input]
+sys._set_generator_debugging_extra_items
+
+    generator: object
+    extra_items: object
+    /
+
+Set extra debugging items on a generator object.
+[clinic start generated code]*/
+
+static PyObject *
+sys__set_generator_debugging_extra_items_impl(PyObject *module,
+                                              PyObject *generator,
+                                              PyObject *extra_items)
+/*[clinic end generated code: output=87ef2334ceb4b642 input=37acd4be805954b2]*/
+{
+    if (!PyGen_CheckExact(generator)) {
+        PyErr_Format(PyExc_TypeError,
+                     "expected a generator for \"generator\", got %.50s",
+                     Py_TYPE(generator)->tp_name);
+        return NULL;
+    }
+    if (!(extra_items == Py_None || PyGen_CheckExact(extra_items))) {
+        PyErr_Format(PyExc_TypeError,
+                     "expected a generator for \"extra_items\", got %.50s",
+                     Py_TYPE(extra_items)->tp_name);
+        return NULL;
+    }
+    _PyGen_SetDebuggingExtraItems(generator, extra_items);
+    Py_RETURN_NONE;
+}
 
 /*[clinic input]
 sys.set_int_max_str_digits
@@ -2836,6 +2868,7 @@ static PyMethodDef sys_methods[] = {
     SYS_REMOTE_EXEC_METHODDEF
     SYS_UNRAISABLEHOOK_METHODDEF
     SYS_GET_INT_MAX_STR_DIGITS_METHODDEF
+    SYS__SET_GENERATOR_DEBUGGING_EXTRA_ITEMS_METHODDEF
     SYS_SET_INT_MAX_STR_DIGITS_METHODDEF
     SYS__BASEREPL_METHODDEF
 #ifdef Py_STATS

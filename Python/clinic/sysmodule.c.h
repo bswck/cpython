@@ -903,6 +903,38 @@ sys_get_int_max_str_digits(PyObject *module, PyObject *Py_UNUSED(ignored))
     return sys_get_int_max_str_digits_impl(module);
 }
 
+PyDoc_STRVAR(sys__set_generator_debugging_extra_items__doc__,
+"_set_generator_debugging_extra_items($module, generator, extra_items, /)\n"
+"--\n"
+"\n"
+"Set extra debugging items on a generator object.");
+
+#define SYS__SET_GENERATOR_DEBUGGING_EXTRA_ITEMS_METHODDEF    \
+    {"_set_generator_debugging_extra_items", _PyCFunction_CAST(sys__set_generator_debugging_extra_items), METH_FASTCALL, sys__set_generator_debugging_extra_items__doc__},
+
+static PyObject *
+sys__set_generator_debugging_extra_items_impl(PyObject *module,
+                                              PyObject *generator,
+                                              PyObject *extra_items);
+
+static PyObject *
+sys__set_generator_debugging_extra_items(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    PyObject *generator;
+    PyObject *extra_items;
+
+    if (!_PyArg_CheckPositional("_set_generator_debugging_extra_items", nargs, 2, 2)) {
+        goto exit;
+    }
+    generator = args[0];
+    extra_items = args[1];
+    return_value = sys__set_generator_debugging_extra_items_impl(module, generator, extra_items);
+
+exit:
+    return return_value;
+}
+
 PyDoc_STRVAR(sys_set_int_max_str_digits__doc__,
 "set_int_max_str_digits($module, /, maxdigits)\n"
 "--\n"
@@ -1948,4 +1980,4 @@ exit:
 #ifndef SYS_GETANDROIDAPILEVEL_METHODDEF
     #define SYS_GETANDROIDAPILEVEL_METHODDEF
 #endif /* !defined(SYS_GETANDROIDAPILEVEL_METHODDEF) */
-/*[clinic end generated code: output=449d16326e69dcf6 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=84476532ccb86349 input=a9049054013a1b77]*/

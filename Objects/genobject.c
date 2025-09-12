@@ -84,6 +84,23 @@ gen_traverse(PyObject *self, visitproc visit, void *arg)
 }
 
 void
+_PyGen_SetDebuggingExtraItems(PyObject *self, PyObject *extra_items)
+{
+    PyGenObject *op = _PyGen_CAST(self);
+    PyGenObject *gen_extra_items;
+
+    if (extra_items == Py_None) {
+        gen_extra_items = NULL;
+    }
+    else {
+        gen_extra_items = _PyGen_CAST(extra_items);
+    }
+    op->gi_debugging_extra_items = gen_extra_items;
+    Py_XINCREF(extra_items);
+}
+
+
+void
 _PyGen_Finalize(PyObject *self)
 {
     PyGenObject *gen = (PyGenObject *)self;
@@ -699,6 +716,7 @@ gen_repr(PyObject *self)
     return PyUnicode_FromFormat("<generator object %S at %p>",
                                 gen->gi_qualname, gen);
 }
+
 
 static PyObject *
 gen_get_name(PyObject *self, void *Py_UNUSED(ignored))
