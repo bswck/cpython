@@ -3120,7 +3120,16 @@ task_step_impl(asyncio_state *state, TaskObj *task, PyObject *exc)
 
     int gen_status = PYGEN_ERROR;
     if (exc == NULL) {
-        gen_status = PyIter_Send(coro, Py_None, &result);
+        PyCoroObject *coro_obj = (PyCoroObject *)coro;
+        if (coro_obj->cr_debug_insert != NULL) {
+            gen_status = PyIter_Send(_PyObject_CAST(coro_obj->cr_debug_insert), Py_None, &result);
+            if (gen_status == PYGEN_RETURN) {
+                Py_CLEAR(coro_obj->cr_debug_insert);
+            }
+        }
+        if (gen_status == PYGEN_ERROR || gen_status == PYGEN_RETURN) {
+            gen_status = PyIter_Send(coro, Py_None, &result);
+        }
     }
     else {
         result = PyObject_CallMethodOneArg(coro, &_Py_ID(throw), exc);
