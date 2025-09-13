@@ -1934,7 +1934,9 @@ sys__set_generator_debugging_extra_items_impl(PyObject *module,
                      Py_TYPE(extra_items)->tp_name);
         return NULL;
     }
-    _PyGen_SetDebuggingExtraItems(generator, extra_items);
+    if (_PyGen_SetDebuggingExtraItems(generator, extra_items) < 0) {
+        return NULL;
+    }
     Py_RETURN_NONE;
 }
 
