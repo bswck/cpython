@@ -673,7 +673,7 @@ gen_iternext(PyObject *self)
     if (gen->gi_debugging_extra_items != NULL) {
         PyObject *debugging_result;
         PySendResult ret = gen_send_ex2(gen->gi_debugging_extra_items, NULL, &debugging_result, 0, 0);
-        if (ret == PYGEN_NEXT) {
+        if (ret == PYGEN_NEXT || ret == PYGEN_ERROR) {
             return debugging_result;
         }
         Py_CLEAR(gen->gi_debugging_extra_items);
