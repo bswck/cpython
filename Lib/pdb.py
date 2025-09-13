@@ -838,19 +838,18 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             insert = self._create_generator_insert(
                 line, self.curframe.f_globals, self.curframe.f_locals, is_async=is_async)
             sys._set_generator_insert(generator, insert)
-            return None, False
-        return code, True
+            return self.compile_command('pass')
+        return code, line
 
     def _read_code(self, line):
-        buffer = line
-        code, execute = self.compile_command(line)
-        if code is None and execute:
+        code, buffer = self.compile_command(line)
+        if code is None:
             # Multi-line mode
             with self._enable_multiline_input():
                 buffer = line
                 continue_prompt = "...   "
                 while True:
-                    code, execute = self.compile_command(buffer)
+                    code, buffer = self.compile_command(buffer)
                     if code is not None:
                         break
                     if self.use_rawinput:
@@ -877,14 +876,14 @@ class Pdb(bdb.Bdb, cmd.Cmd):
                     else:
                         buffer += '\n' + line
                 self.lastcmd = buffer
-        return code, buffer, execute
+        return code, buffer
 
     def default(self, line):
         if line[:1] == '!': line = line[1:].strip()
         locals = self.curframe.f_locals
         globals = self.curframe.f_globals
         try:
-            code, buffer, execute = self._read_code(line)
+            code, buffer = self._read_code(line)
             if buffer is None:
                 return
             save_stdout = sys.stdout
@@ -894,7 +893,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
                 sys.stdin = self.stdin
                 sys.stdout = self.stdout
                 sys.displayhook = self.displayhook
-                if execute and not self._exec_in_closure(buffer, globals, locals):
+                if not self._exec_in_closure(buffer, globals, locals):
                     exec(code, globals, locals)
             finally:
                 sys.stdout = save_stdout
