@@ -87,14 +87,12 @@ void
 _PyGen_SetDebuggingExtraItems(PyObject *self, PyObject *extra_items)
 {
     PyGenObject *op = _PyGen_CAST(self);
-    PyGenObject *gen_extra_items;
 
     if (extra_items == Py_None) {
-        gen_extra_items = NULL;
+        Py_CLEAR(op->gi_debugging_extra_items);
+        return;
     }
-    else {
-        gen_extra_items = _PyGen_CAST(extra_items);
-    }
+    PyGenObject *gen_extra_items = _PyGen_CAST(extra_items);
     op->gi_debugging_extra_items = gen_extra_items;
     Py_XINCREF(extra_items);
 }
