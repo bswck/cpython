@@ -1907,34 +1907,37 @@ sys_get_int_max_str_digits_impl(PyObject *module)
 }
 
 /*[clinic input]
-sys._set_generator_debugging_extra_items
+sys._set_generator_insert
 
     generator: object
-    extra_items: object
+    insert: object
     /
 
-Set extra debugging items on a generator object.
+Insert a generator into another generator's stack for debugging purposes.
 [clinic start generated code]*/
 
 static PyObject *
-sys__set_generator_debugging_extra_items_impl(PyObject *module,
-                                              PyObject *generator,
-                                              PyObject *extra_items)
-/*[clinic end generated code: output=87ef2334ceb4b642 input=37acd4be805954b2]*/
+sys__set_generator_insert_impl(PyObject *module, PyObject *generator,
+                               PyObject *insert)
+/*[clinic end generated code: output=655b97e9301f4639 input=8e576888e04e5cdc]*/
 {
-    if (!PyGen_CheckExact(generator)) {
+    if (!(PyGen_Check(generator) || PyCoro_CheckExact(generator) || PyAsyncGen_CheckExact(generator))) {
         PyErr_Format(PyExc_TypeError,
-                     "expected a generator for \"generator\", got %.50s",
+                     "expected a generator, coroutine or async generator as \"generator\", got %.50s",
                      Py_TYPE(generator)->tp_name);
         return NULL;
     }
-    if (!(extra_items == Py_None || PyGen_CheckExact(extra_items))) {
+
+    PyTypeObject *generator_type = Py_TYPE(generator);
+    if (!(insert == Py_None || Py_IS_TYPE(insert, generator_type))) {
         PyErr_Format(PyExc_TypeError,
-                     "expected a generator for \"extra_items\", got %.50s",
-                     Py_TYPE(extra_items)->tp_name);
+                     "expected %s or None as \"insert\", got %.50s",
+                     generator_type->tp_name,
+                     Py_TYPE(insert)->tp_name);
         return NULL;
     }
-    if (_PyGen_SetDebuggingExtraItems(generator, extra_items) < 0) {
+
+    if (_PyGen_InsertGenerator(generator, insert) < 0) {
         return NULL;
     }
     Py_RETURN_NONE;
@@ -2870,7 +2873,7 @@ static PyMethodDef sys_methods[] = {
     SYS_REMOTE_EXEC_METHODDEF
     SYS_UNRAISABLEHOOK_METHODDEF
     SYS_GET_INT_MAX_STR_DIGITS_METHODDEF
-    SYS__SET_GENERATOR_DEBUGGING_EXTRA_ITEMS_METHODDEF
+    SYS__SET_GENERATOR_INSERT_METHODDEF
     SYS_SET_INT_MAX_STR_DIGITS_METHODDEF
     SYS__BASEREPL_METHODDEF
 #ifdef Py_STATS

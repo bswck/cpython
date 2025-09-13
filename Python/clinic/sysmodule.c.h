@@ -903,33 +903,32 @@ sys_get_int_max_str_digits(PyObject *module, PyObject *Py_UNUSED(ignored))
     return sys_get_int_max_str_digits_impl(module);
 }
 
-PyDoc_STRVAR(sys__set_generator_debugging_extra_items__doc__,
-"_set_generator_debugging_extra_items($module, generator, extra_items, /)\n"
+PyDoc_STRVAR(sys__set_generator_insert__doc__,
+"_set_generator_insert($module, generator, insert, /)\n"
 "--\n"
 "\n"
-"Set extra debugging items on a generator object.");
+"Insert a generator into another generator\'s stack for debugging purposes.");
 
-#define SYS__SET_GENERATOR_DEBUGGING_EXTRA_ITEMS_METHODDEF    \
-    {"_set_generator_debugging_extra_items", _PyCFunction_CAST(sys__set_generator_debugging_extra_items), METH_FASTCALL, sys__set_generator_debugging_extra_items__doc__},
-
-static PyObject *
-sys__set_generator_debugging_extra_items_impl(PyObject *module,
-                                              PyObject *generator,
-                                              PyObject *extra_items);
+#define SYS__SET_GENERATOR_INSERT_METHODDEF    \
+    {"_set_generator_insert", _PyCFunction_CAST(sys__set_generator_insert), METH_FASTCALL, sys__set_generator_insert__doc__},
 
 static PyObject *
-sys__set_generator_debugging_extra_items(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+sys__set_generator_insert_impl(PyObject *module, PyObject *generator,
+                               PyObject *insert);
+
+static PyObject *
+sys__set_generator_insert(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     PyObject *generator;
-    PyObject *extra_items;
+    PyObject *insert;
 
-    if (!_PyArg_CheckPositional("_set_generator_debugging_extra_items", nargs, 2, 2)) {
+    if (!_PyArg_CheckPositional("_set_generator_insert", nargs, 2, 2)) {
         goto exit;
     }
     generator = args[0];
-    extra_items = args[1];
-    return_value = sys__set_generator_debugging_extra_items_impl(module, generator, extra_items);
+    insert = args[1];
+    return_value = sys__set_generator_insert_impl(module, generator, insert);
 
 exit:
     return return_value;
@@ -1980,4 +1979,4 @@ exit:
 #ifndef SYS_GETANDROIDAPILEVEL_METHODDEF
     #define SYS_GETANDROIDAPILEVEL_METHODDEF
 #endif /* !defined(SYS_GETANDROIDAPILEVEL_METHODDEF) */
-/*[clinic end generated code: output=84476532ccb86349 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=387a125802d78f7d input=a9049054013a1b77]*/

@@ -84,41 +84,40 @@ gen_traverse(PyObject *self, visitproc visit, void *arg)
 }
 
 int
-_PyGen_SetDebuggingExtraItems(PyObject *self, PyObject *extra_items)
+_PyGen_InsertGenerator(PyObject *self, PyObject *insert)
 {
     PyGenObject *op = _PyGen_CAST(self);
 
-    if (!extra_items || extra_items == Py_None) {
-        if (op->gi_debugging_extra_items != NULL) {
-            if (op->gi_debugging_extra_items->gi_frame_state == FRAME_EXECUTING) {
+    if (!insert || insert == Py_None) {
+        if (op->gi_debug_insert != NULL) {
+            if (op->gi_debug_insert->gi_frame_state == FRAME_EXECUTING) {
                 PyErr_SetString(
                     PyExc_RuntimeError,
-                    "the debugging extra items generator cannot clear itself");
+                    "the inserted generator cannot remove itself while running");
                 return -1;
             }
-            Py_CLEAR(op->gi_debugging_extra_items);
+            Py_CLEAR(op->gi_debug_insert);
         }
         return 0;
     }
 
-    PyGenObject *gen_extra_items = _PyGen_CAST(extra_items);
+    PyGenObject *gen_insert = _PyGen_CAST(insert);
 
-    /* The generator being set as debugging extra items must not be itself. */
-    assert(gen_extra_items != op);
+    /* A generator insert must not be the generator itself. */
+    assert(gen_insert != op);
 
-    /* The generator being set as debugging extra items must itself not have debugging extra items,
-       otherwise we could run into indirect infinite recursion. */
-    assert(gen_extra_items->gi_debugging_extra_items == NULL);
+    /* To avoid indirect recursion, a generator insert must itself not have an insert. */
+    assert(gen_insert->gi_debug_insert == NULL);
 
     if (op->gi_frame_state == FRAME_CREATED) {
         PyErr_SetString(
             PyExc_RuntimeError,
-            "cannot set debugging extra items: the generator is not started");
+            "cannot insert to generator: the generator was not started");
         return -1;
     }
 
-    op->gi_debugging_extra_items = gen_extra_items;
-    Py_XINCREF(extra_items);
+    op->gi_debug_insert = gen_insert;
+    Py_XINCREF(insert);
     return 0;
 }
 
@@ -670,13 +669,13 @@ gen_iternext(PyObject *self)
     assert(PyGen_CheckExact(self) || PyCoro_CheckExact(self));
     PyGenObject *gen = _PyGen_CAST(self);
 
-    if (gen->gi_debugging_extra_items != NULL) {
+    if (gen->gi_debug_insert != NULL) {
         PyObject *debugging_result;
-        PySendResult ret = gen_send_ex2(gen->gi_debugging_extra_items, NULL, &debugging_result, 0, 0);
+        PySendResult ret = gen_send_ex2(gen->gi_debug_insert, NULL, &debugging_result, 0, 0);
         if (ret == PYGEN_NEXT || ret == PYGEN_ERROR) {
             return debugging_result;
         }
-        Py_CLEAR(gen->gi_debugging_extra_items);
+        Py_CLEAR(gen->gi_debug_insert);
         Py_CLEAR(debugging_result);
     }
 
@@ -980,7 +979,7 @@ make_gen(PyTypeObject *type, PyFunctionObject *func)
         return NULL;
     }
     gen->gi_frame_state = FRAME_CLEARED;
-    gen->gi_debugging_extra_items = NULL;
+    gen->gi_debug_insert = NULL;
     gen->gi_weakreflist = NULL;
     gen->gi_exc_state.exc_value = NULL;
     gen->gi_exc_state.previous_item = NULL;
@@ -1059,7 +1058,7 @@ gen_new_with_qualname(PyTypeObject *type, PyFrameObject *f,
     _PyInterpreterFrame *frame = &gen->gi_iframe;
     _PyFrame_Copy((_PyInterpreterFrame *)f->_f_frame_data, frame);
     gen->gi_frame_state = FRAME_CREATED;
-    gen->gi_debugging_extra_items = NULL;
+    gen->gi_debug_insert = NULL;
     assert(frame->frame_obj == f);
     f->f_frame = frame;
     frame->owner = FRAME_OWNED_BY_GENERATOR;
