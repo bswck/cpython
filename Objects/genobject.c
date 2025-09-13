@@ -91,8 +91,12 @@ _PyGen_SetDebuggingExtraItems(PyObject *self, PyObject *extra_items)
     if (!extra_items || extra_items == Py_None) {
         if (op->gi_debugging_extra_items != NULL) {
             PyGenObject* old_extra_items = op->gi_debugging_extra_items;
-            assert(old_extra_items->gi_frame_state != FRAME_EXECUTING);
-            gen_close(_PyObject_CAST(old_extra_items), NULL);
+            if (old_extra_items->gi_frame_state == FRAME_EXECUTING) {
+                PyErr_SetString(
+                    PyExc_RuntimeError,
+                    "the generator being removed as debugging extra items is currently executing");
+                return -1;
+            }
             Py_CLEAR(old_extra_items);
         }
         return 0;
