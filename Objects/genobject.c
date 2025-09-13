@@ -93,7 +93,7 @@ _PyGen_InsertGenerator(PyObject *self, PyObject *insert)
             if (op->gi_debug_insert->gi_frame_state == FRAME_EXECUTING) {
                 PyErr_SetString(
                     PyExc_RuntimeError,
-                    "the inserted generator cannot remove itself while running");
+                    "the inserted generator can't manage itself; use return instead");
                 return -1;
             }
             Py_CLEAR(op->gi_debug_insert);
@@ -670,13 +670,14 @@ gen_iternext(PyObject *self)
     PyGenObject *gen = _PyGen_CAST(self);
 
     if (gen->gi_debug_insert != NULL) {
-        PyObject *debugging_result;
+        PyObject *debugging_result = NULL;
         PySendResult ret = gen_send_ex2(gen->gi_debug_insert, NULL, &debugging_result, 0, 0);
-        if (ret == PYGEN_NEXT || ret == PYGEN_ERROR) {
-            return debugging_result;
+        if (ret == PYGEN_ERROR || ret == PYGEN_RETURN) {
+            Py_CLEAR(gen->gi_debug_insert);
+            Py_CLEAR(debugging_result);
         }
-        Py_CLEAR(gen->gi_debug_insert);
-        Py_CLEAR(debugging_result);
+        if (debugging_result || PyErr_Occurred())
+            return debugging_result;
     }
 
     PyObject *result;
