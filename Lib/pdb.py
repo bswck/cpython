@@ -390,9 +390,6 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         self.commands_bnum = None # The breakpoint number for which we are
                                   # defining a list
 
-        self.async_shim_frame = None
-        self.async_awaitable = None
-
         self._chained_exceptions = tuple()
         self._chained_exception_index = 0
 
@@ -407,57 +404,6 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             self.rcLines.extend(commands)
 
         super().set_trace(frame)
-
-    async def set_trace_async(self, frame=None, *, commands=None):
-        if self.async_awaitable is not None:
-            # We are already in a set_trace_async call, do not mess with it
-            return
-
-        if frame is None:
-            frame = sys._getframe().f_back
-
-        # We need set_trace to set up the basics, however, this will call
-        # set_stepinstr() will we need to compensate for, because we don't
-        # want to trigger on calls
-        self.set_trace(frame, commands=commands)
-        # Changing the stopframe will disable trace dispatch on calls
-        self.stopframe = frame
-        # We need to stop tracing because we don't have the privilege to avoid
-        # triggering tracing functions as normal, as we are not already in
-        # tracing functions
-        self.stop_trace()
-
-        self.async_shim_frame = sys._getframe()
-        self.async_awaitable = None
-
-        while True:
-            self.async_awaitable = None
-            # Simulate a trace event
-            # This should bring up pdb and make pdb believe it's debugging the
-            # caller frame
-            self.trace_dispatch(frame, "opcode", None)
-            if self.async_awaitable is not None:
-                try:
-                    if self.breaks:
-                        with self.set_enterframe(frame):
-                            # set_continue requires enterframe to work
-                            self.set_continue()
-                        self.start_trace()
-                    await self.async_awaitable
-                except Exception:
-                    self._error_exc()
-            else:
-                break
-
-        self.async_shim_frame = None
-
-        # start the trace (the actual command is already set by set_* calls)
-        if self.returnframe is None and self.stoplineno == -1 and not self.breaks:
-            # This means we did a continue without any breakpoints, we should not
-            # start the trace
-            return
-
-        self.start_trace()
 
     def sigint_handler(self, signum, frame):
         if self.allow_kbdint:
@@ -863,73 +809,82 @@ class Pdb(bdb.Bdb, cmd.Cmd):
 
         return True
 
-    def _exec_await(self, source, globals, locals):
-        """ Run source code that contains await by playing with async shim frame"""
-        # Put the source in an async function
-        source_async = (
-            "async def __pdb_await():\n" +
+    def _create_generator_insert(self, source, globals, locals, is_async=False):
+        source = (
+            "async " * is_async + "def __pdb_insert():\n" +
             textwrap.indent(source, "    ") + '\n' +
             "    __pdb_locals.update(locals())"
         )
         ns = globals | locals
         # We use __pdb_locals to do write back
         ns["__pdb_locals"] = locals
-        exec(source_async, ns)
-        self.async_awaitable = ns["__pdb_await"]()
+        exec(source, ns)
+        return ns["__pdb_insert"]()
+
+    def compile_command(self, line):
+        """Compile a command line into a code object."""
+        try:
+            code = codeop.compile_command(line + '\n', '<stdin>', 'single')
+        except SyntaxError as e:
+            generator = self.curframe.f_generator
+            if generator is None:
+                raise
+            is_async = inspect.iscoroutine(generator) or inspect.isasyncgen(generator)
+            if e.msg not in (
+                "'await' outside function",
+                "'yield' outside function",
+                "'yield from' outside function"):
+                raise
+            insert = self._create_generator_insert(
+                line, self.curframe.f_globals, self.curframe.f_locals, is_async=is_async)
+            sys._set_generator_insert(generator, insert)
+            return None, False
+        return code, True
 
     def _read_code(self, line):
         buffer = line
-        is_await_code = False
-        code = None
-        try:
-            if (code := codeop.compile_command(line + '\n', '<stdin>', 'single')) is None:
-                # Multi-line mode
-                with self._enable_multiline_input():
-                    buffer = line
-                    continue_prompt = "...   "
-                    while (code := codeop.compile_command(buffer, '<stdin>', 'single')) is None:
-                        if self.use_rawinput:
-                            try:
-                                line = input(continue_prompt)
-                            except (EOFError, KeyboardInterrupt):
-                                self.lastcmd = ""
-                                print('\n')
-                                return None, None, False
-                        else:
-                            self.stdout.write(continue_prompt)
+        code, execute = self.compile_command(line)
+        if code is None and execute:
+            # Multi-line mode
+            with self._enable_multiline_input():
+                buffer = line
+                continue_prompt = "...   "
+                while True:
+                    code, execute = self.compile_command(buffer)
+                    if code is not None:
+                        break
+                    if self.use_rawinput:
+                        try:
+                            line = input(continue_prompt)
+                        except (EOFError, KeyboardInterrupt):
+                            self.lastcmd = ""
+                            print('\n')
+                            return None, None, False
+                    else:
+                        self.stdout.write(continue_prompt)
+                        self.stdout.flush()
+                        line = self.stdin.readline()
+                        if not len(line):
+                            self.lastcmd = ""
+                            self.stdout.write('\n')
                             self.stdout.flush()
-                            line = self.stdin.readline()
-                            if not len(line):
-                                self.lastcmd = ""
-                                self.stdout.write('\n')
-                                self.stdout.flush()
-                                return None, None, False
-                            else:
-                                line = line.rstrip('\r\n')
-                        if line.isspace():
-                            # empty line, just continue
-                            buffer += '\n'
+                            return None, None, False
                         else:
-                            buffer += '\n' + line
-                    self.lastcmd = buffer
-        except SyntaxError as e:
-            # Maybe it's an await expression/statement
-            if (
-                self.async_shim_frame is not None
-                and e.msg == "'await' outside function"
-            ):
-                is_await_code = True
-            else:
-                raise
-
-        return code, buffer, is_await_code
+                            line = line.rstrip('\r\n')
+                    if line.isspace():
+                        # empty line, just continue
+                        buffer += '\n'
+                    else:
+                        buffer += '\n' + line
+                self.lastcmd = buffer
+        return code, buffer, execute
 
     def default(self, line):
         if line[:1] == '!': line = line[1:].strip()
         locals = self.curframe.f_locals
         globals = self.curframe.f_globals
         try:
-            code, buffer, is_await_code = self._read_code(line)
+            code, buffer, execute = self._read_code(line)
             if buffer is None:
                 return
             save_stdout = sys.stdout
@@ -939,12 +894,8 @@ class Pdb(bdb.Bdb, cmd.Cmd):
                 sys.stdin = self.stdin
                 sys.stdout = self.stdout
                 sys.displayhook = self.displayhook
-                if is_await_code:
-                    self._exec_await(buffer, globals, locals)
-                    return True
-                else:
-                    if not self._exec_in_closure(buffer, globals, locals):
-                        exec(code, globals, locals)
+                if execute and not self._exec_in_closure(buffer, globals, locals):
+                    exec(code, globals, locals)
             finally:
                 sys.stdout = save_stdout
                 sys.stdin = save_stdin
