@@ -168,6 +168,7 @@ typedef struct PyConfig {
     int verbose;
     int quiet;
     int user_site_directory;
+    int print_result;
     int configure_c_stdio;
     int buffered_stdio;
     wchar_t *stdio_encoding;

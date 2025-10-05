@@ -559,7 +559,7 @@ PyRun_SimpleFileExFlags(FILE *fp, const char *filename, int closeit,
 
 
 int
-_PyRun_SimpleStringFlagsWithName(const char *command, const char* name, PyCompilerFlags *flags) {
+_PyRun_SimpleStringFlagsWithNameAndStart(const char *command, const char* name, PyCompilerFlags *flags, int start) {
     PyObject *main_module = PyImport_AddModuleRef("__main__");
     if (main_module == NULL) {
         return -1;
@@ -568,14 +568,14 @@ _PyRun_SimpleStringFlagsWithName(const char *command, const char* name, PyCompil
 
     PyObject *res = NULL;
     if (name == NULL) {
-        res = PyRun_StringFlags(command, Py_file_input, dict, dict, flags);
+        res = PyRun_StringFlags(command, start, dict, dict, flags);
     } else {
         PyObject* the_name = PyUnicode_FromString(name);
         if (!the_name) {
             PyErr_Print();
             return -1;
         }
-        res = _PyRun_StringFlagsWithName(command, the_name, Py_file_input, dict, dict, flags, 0);
+        res = _PyRun_StringFlagsWithName(command, the_name, start, dict, dict, flags, 0);
         Py_DECREF(the_name);
     }
     Py_DECREF(main_module);
@@ -586,6 +586,11 @@ _PyRun_SimpleStringFlagsWithName(const char *command, const char* name, PyCompil
 
     Py_DECREF(res);
     return 0;
+}
+
+inline int
+_PyRun_SimpleStringFlagsWithName(const char *command, const char* name, PyCompilerFlags *flags) {
+    return _PyRun_SimpleStringFlagsWithNameAndStart(command, name, flags, Py_file_input);
 }
 
 int

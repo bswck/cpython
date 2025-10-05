@@ -3344,6 +3344,7 @@ static PyStructSequence_Field flags_fields[] = {
     {"interactive",             "-i"},
     {"optimize",                "-O or -OO"},
     {"dont_write_bytecode",     "-B"},
+    {"print_result",            "-p"},
     {"no_user_site",            "-s"},
     {"no_site",                 "-S"},
     {"ignore_environment",      "-E"},

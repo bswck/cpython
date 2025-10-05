@@ -112,6 +112,7 @@ extern int _Py_LegacyLocaleDetected(int warn);
 PyAPI_FUNC(char*) _Py_SetLocaleFromEnv(int category);
 
 // Export for special main.c string compiling with source tracebacks
+int _PyRun_SimpleStringFlagsWithNameAndStart(const char *command, const char* name, PyCompilerFlags *flags, int start);
 int _PyRun_SimpleStringFlagsWithName(const char *command, const char* name, PyCompilerFlags *flags);
 
 

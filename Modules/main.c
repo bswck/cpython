@@ -231,7 +231,7 @@ pymain_import_readline(const PyConfig *config)
 
 
 static int
-pymain_run_command(wchar_t *command)
+pymain_run_command(wchar_t *command, int single)
 {
     PyObject *unicode, *bytes;
     int ret;
@@ -258,7 +258,8 @@ pymain_run_command(wchar_t *command)
 
     PyCompilerFlags cf = _PyCompilerFlags_INIT;
     cf.cf_flags |= PyCF_IGNORE_COOKIE;
-    ret = _PyRun_SimpleStringFlagsWithName(PyBytes_AsString(bytes), "<string>", &cf);
+    ret = _PyRun_SimpleStringFlagsWithNameAndStart(
+        PyBytes_AsString(bytes), "<string>", &cf, single ? Py_single_input : Py_file_input);
     Py_DECREF(bytes);
     return (ret != 0);
 
@@ -679,7 +680,7 @@ pymain_run_python(int *exitcode)
     assert(!PyErr_Occurred());
 
     if (config->run_command) {
-        *exitcode = pymain_run_command(config->run_command);
+        *exitcode = pymain_run_command(config->run_command, config->print_result);
     }
     else if (config->run_module) {
         *exitcode = pymain_run_module(config->run_module, 1);

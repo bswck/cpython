@@ -167,6 +167,7 @@ static const PyConfigSpec PYCONFIG_SPEC[] = {
     SPEC(remote_debug, BOOL, READ_ONLY, NO_SYS),
     SPEC(program_name, WSTR, READ_ONLY, NO_SYS),
     SPEC(run_command, WSTR_OPT, READ_ONLY, NO_SYS),
+    SPEC(print_result, BOOL, READ_ONLY, NO_SYS),
     SPEC(run_filename, WSTR_OPT, READ_ONLY, NO_SYS),
     SPEC(run_module, WSTR_OPT, READ_ONLY, NO_SYS),
 #ifdef Py_DEBUG
@@ -258,6 +259,7 @@ Options (and corresponding environment variables):\n\
          bytes/bytearray with str or bytes with int. (-bb: issue errors)\n\
 -B     : don't write .pyc files on import; also PYTHONDONTWRITEBYTECODE=x\n\
 -c cmd : program passed in as string (terminates option list)\n\
+-p     : print the result of the program passed in as string (use with -c)\n\
 -d     : turn on parser debugging output (for experts only, only works on\n\
          debug builds); also PYTHONDEBUG=x\n\
 -E     : ignore PYTHON* environment variables (such as PYTHONPATH)\n\
@@ -908,6 +910,7 @@ config_check_consistency(const PyConfig *config)
     assert(config->verbose >= 0);
     assert(config->quiet >= 0);
     assert(config->user_site_directory >= 0);
+    assert(config->print_result >= 0);
     assert(config->parse_argv >= 0);
     assert(config->configure_c_stdio >= 0);
     assert(config->buffered_stdio >= 0);
@@ -1081,6 +1084,7 @@ config_init_defaults(PyConfig *config)
     config->verbose = 0;
     config->quiet = 0;
     config->user_site_directory = 1;
+    config->print_result = 0;
     config->buffered_stdio = 1;
     config->pathconfig_warnings = 1;
 #ifdef MS_WINDOWS
@@ -2976,6 +2980,10 @@ config_parse_cmdline(PyConfig *config, PyWideStringList *warnoptions,
 
         case 's':
             config->user_site_directory = 0;
+            break;
+
+        case 'p':
+            config->print_result = 1;
             break;
 
         case 'S':
