@@ -231,7 +231,7 @@ pymain_import_readline(const PyConfig *config)
 
 
 static int
-pymain_run_command(wchar_t *command, int single)
+pymain_run_command(wchar_t *command, int print_result)
 {
     PyObject *unicode, *bytes;
     int ret;
@@ -258,8 +258,8 @@ pymain_run_command(wchar_t *command, int single)
 
     PyCompilerFlags cf = _PyCompilerFlags_INIT;
     cf.cf_flags |= PyCF_IGNORE_COOKIE;
-    ret = _PyRun_SimpleStringFlagsWithNameAndStart(
-        PyBytes_AsString(bytes), "<string>", &cf, single ? Py_single_input : Py_file_input);
+    ret = _PyRun_SimpleStringFlagsWithNameAndMode(
+        PyBytes_AsString(bytes), "<string>", &cf, print_result ? Py_single_input : Py_file_input);
     Py_DECREF(bytes);
     return (ret != 0);
 
