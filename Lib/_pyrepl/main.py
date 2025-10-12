@@ -14,6 +14,7 @@ try:
     from .simple_interact import check
     if err := check():
         raise RuntimeError(err)
+    raise RuntimeError("always fail!")
 except Exception as e:
     CAN_USE_PYREPL = False
     FAIL_REASON = f"warning: can't use pyrepl: {e}"
