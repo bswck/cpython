@@ -584,6 +584,8 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     USE_LABEL(c, got_coroutine);
     // Stack: [aiterator, coroutine]
 
+    ADDOP_I(c, loc, GET_AWAITABLE, 0);
+
     // Virtual try/except for the StopAsyncIteration
     ADDOP_JUMP(c, loc, SETUP_FINALLY, exit);
 

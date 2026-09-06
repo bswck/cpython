@@ -1716,6 +1716,70 @@ class TestPEP828Extras(unittest.TestCase):
                 self.assertEqual([item async for item in delegate()], [None])
 
     @_async_test
+    async def test_delegate_custom_awaitable(self):
+        class Awaitable:
+            def __init__(self, value):
+                self.value = value
+
+            def __await__(self):
+                if False:
+                    yield
+                return self.value
+
+        class Iterator:
+            def __aiter__(self):
+                return self
+
+            def __anext__(self):
+                return Awaitable(1)
+
+            def asend(self, value):
+                return Awaitable(value)
+
+        async def delegate():
+            yield from Iterator()
+
+        gen = delegate()
+        self.assertEqual(await anext(gen), 1)
+        self.assertEqual(await gen.asend(42), 42)
+        await gen.aclose()
+
+    @_async_test
+    async def test_delegate_requires_awaitable(self):
+        def plain_generator():
+            if False:
+                yield
+            return 42
+
+        class Iterator:
+            def __aiter__(self):
+                return self
+
+            def __anext__(self):
+                return result
+
+            def asend(self, value):
+                return value
+
+        async def delegate():
+            yield from Iterator()
+
+        for result in (42, plain_generator()):
+            with self.subTest(result=type(result)):
+                gen = delegate()
+                with self.assertRaisesRegex(TypeError, "can't be awaited"):
+                    await anext(gen)
+
+        async def value():
+            return 1
+
+        result = value()
+        gen = delegate()
+        self.assertEqual(await anext(gen), 1)
+        with self.assertRaisesRegex(TypeError, "can't be awaited"):
+            await gen.asend(42)
+
+    @_async_test
     async def test_delegate_exception(self):
         yielded_first = sentinel("yielded_first")
         yielded_second = sentinel("yielded_second")
