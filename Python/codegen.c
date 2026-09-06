@@ -569,6 +569,7 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     ADDOP_I(c, loc, COPY, 2);
     ADDOP_I(c, loc, SWAP, 2);
     ADDOP_I(c, loc, YIELD_VALUE, 1);
+    ADDOP_I(c, loc, RESUME, RESUME_AFTER_YIELD_FROM);
     ADDOP(c, NO_LOCATION, POP_BLOCK);
     ADDOP_I(c, loc, SWAP, 2);
     ADDOP(c, loc, POP_TOP);

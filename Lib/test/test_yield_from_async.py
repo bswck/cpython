@@ -8,6 +8,7 @@ the 1:1 mapping. Tests with no PEP 380 analogue go in `TestPEP828Extras`.
 
 import unittest
 import inspect
+import sys
 from functools import partial
 
 lazy from test import test_yield_from
@@ -1817,6 +1818,36 @@ class TestPEP828Extras(unittest.TestCase):
                     await anext(delegate(iterator))
         with self.assertRaisesRegex(TypeError, 'must return an async iterator'):
             await anext(delegate(BadIterator()))
+
+    @_async_test
+    async def test_delegate_resume_monitoring(self):
+        async def child():
+            yield 1
+            yield 2
+
+        async def delegate():
+            yield from child()
+
+        resumed = []
+        tool = sys.monitoring.PROFILER_ID
+        sys.monitoring.use_tool_id(tool, 'async delegation test')
+        try:
+            sys.monitoring.register_callback(
+                tool, sys.monitoring.events.PY_RESUME,
+                lambda code, offset: resumed.append(code))
+            sys.monitoring.set_local_events(
+                tool, delegate.__code__, sys.monitoring.events.PY_RESUME)
+            gen = delegate()
+            self.assertEqual(await anext(gen), 1)
+            self.assertEqual(resumed, [])
+            self.assertEqual(await anext(gen), 2)
+            self.assertEqual(resumed, [delegate.__code__])
+            await gen.aclose()
+        finally:
+            sys.monitoring.set_local_events(tool, delegate.__code__, 0)
+            sys.monitoring.register_callback(
+                tool, sys.monitoring.events.PY_RESUME, None)
+            sys.monitoring.free_tool_id(tool)
 
     @_async_test
     async def test_delegate_requires_awaitable(self):
