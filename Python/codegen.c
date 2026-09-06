@@ -523,115 +523,62 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     NEW_JUMP_TARGET_LABEL(c, got_coroutine);
 
     VISIT(c, expr, e->v.YieldFrom.value);
-    // Stack: [value]
-
     ADDOP_NAME(c, loc, LOAD_ATTR, &_Py_ID(__aiter__), names);
     ADDOP(c, loc, PUSH_NULL);
     ADDOP_I(c, loc, CALL, 0);
-    // Stack: [aiterator]
-
     ADDOP_LOAD_CONST(c, loc, Py_None);
-    // Stack: [aiterator, None]
 
     USE_LABEL(c, send);
-
-    // Stack: [aiterator, asend_value]
+    // Preserve [aiterator, sent_value] while calling and awaiting the method.
+    // Either operation may raise StopAsyncIteration.
+    ADDOP_JUMP(c, loc, SETUP_FINALLY, exit);
     ADDOP_I(c, loc, COPY, 1);
-    // Stack: [aiterator, asend_value, asend_value]
-
+    ADDOP_I(c, loc, COPY, 1);
     ADDOP_LOAD_CONST(c, loc, Py_None);
-    // Stack: [aiterator, asend_value, asend_value, None]
-
     ADDOP_I(c, loc, IS_OP, 0);
-    // Stack: [aiterator, asend_value, bool]
-
     ADDOP_JUMP(c, loc, POP_JUMP_IF_TRUE, use_anext);
 
-    ADDOP_I(c, loc, COPY, 2);
-    // Stack: [aiterator, asend_value, aiterator]
-
+    ADDOP_I(c, loc, COPY, 3);
     ADDOP_NAME(c, loc, LOAD_ATTR, &_Py_ID(asend), names);
-    // Stack: [aiterator, asend_value, bound_method]
-
     ADDOP_I(c, loc, SWAP, 2);
-    // Stack: [aiterator, bound_method, asend_value]
-
     ADDOP(c, loc, PUSH_NULL);
-    // Stack: [aiterator, bound_method, asend_value, NULL]
-
     ADDOP_I(c, loc, SWAP, 2);
-    // Stack: [aiterator, bound_method, NULL, send_value]
-
     ADDOP_I(c, loc, CALL, 1);
-    // Stack: [aiterator, coroutine]
-
     ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, got_coroutine);
 
     USE_LABEL(c, use_anext);
-    // Stack: [aiterator, asend_value]
-
     ADDOP(c, loc, POP_TOP);
-    // Stack: [aiterator]
-
-    ADDOP_I(c, loc, COPY, 1);
-    // Stack: [aiterator, aiterator]
-
+    ADDOP_I(c, loc, COPY, 2);
     ADDOP_NAME(c, loc, LOAD_ATTR, &_Py_ID(__anext__), names);
     ADDOP(c, loc, PUSH_NULL);
     ADDOP_I(c, loc, CALL, 0);
-    // Stack: [aiterator, coroutine]
 
     USE_LABEL(c, got_coroutine);
-    // Stack: [aiterator, coroutine]
-
     ADDOP_I(c, loc, GET_AWAITABLE, 0);
-
-    // Virtual try/except for the StopAsyncIteration
-    ADDOP_JUMP(c, loc, SETUP_FINALLY, exit);
-
     ADDOP(c, loc, PUSH_NULL);
     ADDOP_LOAD_CONST(c, loc, Py_None);
-    // Stack: [aiterator, coroutine, NULL, None]
-
     ADD_YIELD_FROM(c, loc, 1);
-    // Stack: [aiterator, asend_result]
+    ADDOP(c, NO_LOCATION, POP_BLOCK);
+    // Discard the saved sent_value, leaving [aiterator, result].
+    ADDOP_I(c, loc, SWAP, 2);
+    ADDOP(c, loc, POP_TOP);
 
     ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_ASYNC_GEN_WRAP);
-    // Stack: [aiterator, wrapped_result]
-
-    // Generators expect the iterable at stack_top[-2], so we have to make an
-    // extra copy.
+    ADDOP_JUMP(c, loc, SETUP_FINALLY, exit);
+    // A suspended delegation keeps the delegate at stack_top[-2].
     ADDOP_I(c, loc, COPY, 2);
-    // Stack: [aiterator, wrapped_result, aiterator]
-
     ADDOP_I(c, loc, SWAP, 2);
-    // Stack: [aiterator, aiterator, wrapped_result]
-
     ADDOP_I(c, loc, YIELD_VALUE, 1);
-    // Stack: [aiterator, aiterator, resumed_value]
-
     ADDOP(c, NO_LOCATION, POP_BLOCK);
-
     ADDOP_I(c, loc, SWAP, 2);
-    // Stack: [aiterator, resumed_value, aiterator]
-
     ADDOP(c, loc, POP_TOP);
-    // Stack: [aiterator, resumed_value]
-
     ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, send);
 
     USE_LABEL(c, exit);
-    // Stack: [aiterator, send_value, exc_value] (from SETUP_FINALLY)
-
+    // Discard the saved value or duplicate iterator before handling the error.
     ADDOP_I(c, loc, SWAP, 2);
-    // Stack: [aiterator, exc_value, send_value]
-
     ADDOP(c, loc, POP_TOP);
-    // Stack: [aiterator, exc_value]
-
     ADDOP(c, loc, CLEANUP_ASYNC_THROW);
-    // Stack: [result]
-
     return SUCCESS;
 }
 

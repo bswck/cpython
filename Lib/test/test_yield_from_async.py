@@ -1745,6 +1745,40 @@ class TestPEP828Extras(unittest.TestCase):
         await gen.aclose()
 
     @_async_test
+    async def test_synchronous_delegate_exhaustion(self):
+        class Iterator:
+            def __aiter__(self):
+                return self
+
+            def __anext__(self):
+                if self.empty:
+                    raise StopAsyncIteration(42)
+                self.empty = True
+                return value()
+
+            def asend(self, sent):
+                raise StopAsyncIteration(sent)
+
+        async def value():
+            return 1
+
+        async def delegate(iterator):
+            yield (yield from iterator)
+
+        for initially_empty in (True, False):
+            iterator = Iterator()
+            iterator.empty = initially_empty
+            expected = [42] if initially_empty else [1, 42]
+            self.assertEqual([x async for x in delegate(iterator)], expected)
+
+        iterator = Iterator()
+        iterator.empty = False
+        gen = delegate(iterator)
+        self.assertEqual(await anext(gen), 1)
+        self.assertEqual(await gen.asend(99), 99)
+        await gen.aclose()
+
+    @_async_test
     async def test_delegate_requires_awaitable(self):
         def plain_generator():
             if False:
