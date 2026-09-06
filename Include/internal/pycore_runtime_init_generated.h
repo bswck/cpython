@@ -1578,6 +1578,7 @@ extern "C" {
     INIT_ID(adobe), \
     INIT_ID(after_in_child), \
     INIT_ID(after_in_parent), \
+    INIT_ID(aiter), \
     INIT_ID(alias), \
     INIT_ID(align), \
     INIT_ID(all), \
@@ -1585,6 +1586,7 @@ extern "C" {
     INIT_ID(all_threads), \
     INIT_ID(allow_code), \
     INIT_ID(alphabet), \
+    INIT_ID(anext), \
     INIT_ID(any), \
     INIT_ID(append), \
     INIT_ID(arg), \

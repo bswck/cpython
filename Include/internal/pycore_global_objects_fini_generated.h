@@ -1580,6 +1580,7 @@ _PyStaticObjects_CheckRefcnt(PyInterpreterState *interp) {
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(adobe));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(after_in_child));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(after_in_parent));
+    _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(aiter));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(alias));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(align));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(all));
@@ -1587,6 +1588,7 @@ _PyStaticObjects_CheckRefcnt(PyInterpreterState *interp) {
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(all_threads));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(allow_code));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(alphabet));
+    _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(anext));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(any));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(append));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(arg));

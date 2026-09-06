@@ -898,6 +898,14 @@ pycore_init_builtins(PyThreadState *tstate)
     common_objs[CONSTANT_BUILTIN_FROZENSET] = (PyObject *)&PyFrozenSet_Type;
     common_objs[CONSTANT_EMPTY_TUPLE] =
         Py_GetConstantBorrowed(Py_CONSTANT_EMPTY_TUPLE);
+    common_objs[CONSTANT_BUILTIN_AITER] =
+        PyDict_GetItemWithError(builtins_dict, &_Py_ID(aiter));
+    common_objs[CONSTANT_BUILTIN_ANEXT] =
+        PyDict_GetItemWithError(builtins_dict, &_Py_ID(anext));
+    if (common_objs[CONSTANT_BUILTIN_AITER] == NULL ||
+        common_objs[CONSTANT_BUILTIN_ANEXT] == NULL) {
+        goto error;
+    }
     for (int i = 0; i < NUM_COMMON_CONSTANTS; i++) {
         assert(common_objs[i] != NULL);
         _Py_SetImmortal(common_objs[i]);

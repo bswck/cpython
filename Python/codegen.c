@@ -522,10 +522,10 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     NEW_JUMP_TARGET_LABEL(c, use_anext);
     NEW_JUMP_TARGET_LABEL(c, got_coroutine);
 
-    VISIT(c, expr, e->v.YieldFrom.value);
-    ADDOP_NAME(c, loc, LOAD_ATTR, &_Py_ID(__aiter__), names);
+    ADDOP_I(c, loc, LOAD_COMMON_CONSTANT, CONSTANT_BUILTIN_AITER);
     ADDOP(c, loc, PUSH_NULL);
-    ADDOP_I(c, loc, CALL, 0);
+    VISIT(c, expr, e->v.YieldFrom.value);
+    ADDOP_I(c, loc, CALL, 1);
     ADDOP_LOAD_CONST(c, loc, Py_None);
 
     USE_LABEL(c, send);
@@ -548,10 +548,10 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
 
     USE_LABEL(c, use_anext);
     ADDOP(c, loc, POP_TOP);
-    ADDOP_I(c, loc, COPY, 2);
-    ADDOP_NAME(c, loc, LOAD_ATTR, &_Py_ID(__anext__), names);
+    ADDOP_I(c, loc, LOAD_COMMON_CONSTANT, CONSTANT_BUILTIN_ANEXT);
     ADDOP(c, loc, PUSH_NULL);
-    ADDOP_I(c, loc, CALL, 0);
+    ADDOP_I(c, loc, COPY, 4);
+    ADDOP_I(c, loc, CALL, 1);
 
     USE_LABEL(c, got_coroutine);
     ADDOP_I(c, loc, GET_AWAITABLE, 0);

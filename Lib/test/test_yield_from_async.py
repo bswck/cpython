@@ -1779,6 +1779,46 @@ class TestPEP828Extras(unittest.TestCase):
         await gen.aclose()
 
     @_async_test
+    async def test_delegate_special_method_lookup(self):
+        class Iterator:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                return 42
+
+            def __getattribute__(self, name):
+                if name in ('__aiter__', '__anext__'):
+                    raise AssertionError('ordinary attribute lookup')
+                return super().__getattribute__(name)
+
+        async def delegate(iterator):
+            yield from iterator
+
+        iterator = Iterator()
+        iterator.__aiter__ = lambda: None
+        iterator.__anext__ = lambda: None
+        gen = delegate(iterator)
+        self.assertEqual(await anext(gen), 42)
+        await gen.aclose()
+
+    @_async_test
+    async def test_delegate_invalid_iterator(self):
+        class BadIterator:
+            def __aiter__(self):
+                return None
+
+        async def delegate(iterator):
+            yield from iterator
+
+        for iterator in (42, []):
+            with self.subTest(iterator=iterator):
+                with self.assertRaisesRegex(TypeError, 'not an async iterable'):
+                    await anext(delegate(iterator))
+        with self.assertRaisesRegex(TypeError, 'must return an async iterator'):
+            await anext(delegate(BadIterator()))
+
+    @_async_test
     async def test_delegate_requires_awaitable(self):
         def plain_generator():
             if False:
