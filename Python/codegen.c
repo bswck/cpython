@@ -528,6 +528,10 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     NEW_JUMP_TARGET_LABEL(c, not_close);
     NEW_JUMP_TARGET_LABEL(c, close_cleanup);
     NEW_JUMP_TARGET_LABEL(c, done);
+    NEW_JUMP_TARGET_LABEL(c, yield_value);
+    NEW_JUMP_TARGET_LABEL(c, throw_cleanup);
+    NEW_JUMP_TARGET_LABEL(c, throw_stop);
+    NEW_JUMP_TARGET_LABEL(c, no_throw);
 
     ADDOP_I(c, loc, LOAD_COMMON_CONSTANT, CONSTANT_BUILTIN_AITER);
     ADDOP(c, loc, PUSH_NULL);
@@ -570,12 +574,14 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     ADDOP_I(c, loc, SWAP, 2);
     ADDOP(c, loc, POP_TOP);
 
+    USE_LABEL(c, yield_value);
     ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_ASYNC_GEN_WRAP);
     ADDOP_JUMP(c, loc, SETUP_FINALLY, thrown);
-    // A suspended delegation keeps the delegate at stack_top[-2].
+    // Preserve the iterator in the exception handler's two stack slots.
     ADDOP_I(c, loc, COPY, 2);
     ADDOP_I(c, loc, SWAP, 2);
-    ADDOP_I(c, loc, YIELD_VALUE, 1);
+    // Throw into this frame so it can await the delegate's operation.
+    ADDOP_I(c, loc, YIELD_VALUE, 0);
     ADDOP_I(c, loc, RESUME, RESUME_AFTER_YIELD_FROM);
     ADDOP(c, NO_LOCATION, POP_BLOCK);
     ADDOP_I(c, loc, SWAP, 2);
@@ -612,7 +618,47 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     POP_EXCEPT_AND_RERAISE(c, NO_LOCATION);
 
     USE_LABEL(c, not_close);
+    ADDOP_JUMP(c, NO_LOCATION, SETUP_CLEANUP, throw_cleanup);
+    ADDOP(c, NO_LOCATION, PUSH_EXC_INFO);
+    // Stack: [aiterator, previous_exception, exception].
+    ADDOP_JUMP(c, loc, SETUP_FINALLY, throw_stop);
+    ADDOP_I(c, loc, COPY, 3);
+    ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_ASYNC_GEN_GET_THROW);
+    ADDOP_I(c, loc, COPY, 1);
+    ADDOP_LOAD_CONST(c, loc, Py_None);
+    ADDOP_I(c, loc, IS_OP, 0);
+    ADDOP_JUMP(c, loc, POP_JUMP_IF_TRUE, no_throw);
+    ADDOP(c, loc, PUSH_NULL);
+    ADDOP_I(c, loc, COPY, 3);
+    ADDOP_I(c, loc, CALL, 1);
+    ADDOP_I(c, loc, GET_AWAITABLE, 0);
+    ADDOP(c, loc, PUSH_NULL);
+    ADDOP_LOAD_CONST(c, loc, Py_None);
+    ADD_YIELD_FROM(c, loc, 1);
+    ADDOP(c, NO_LOCATION, POP_BLOCK);
+    ADDOP(c, NO_LOCATION, POP_BLOCK);
+    ADDOP_I(c, loc, SWAP, 2);
+    ADDOP(c, loc, POP_TOP);
+    ADDOP_I(c, loc, SWAP, 2);
+    ADDOP(c, NO_LOCATION, POP_EXCEPT);
+    ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, yield_value);
+
+    USE_LABEL(c, no_throw);
+    ADDOP(c, loc, POP_TOP);
+    ADDOP_I(c, loc, RERAISE, 0);
+
+    USE_LABEL(c, throw_stop);
+    ADDOP(c, NO_LOCATION, POP_BLOCK);
+    ADDOP_I(c, loc, SWAP, 2);
+    ADDOP(c, loc, POP_TOP);
+    ADDOP_I(c, loc, SWAP, 2);
+    ADDOP(c, NO_LOCATION, POP_EXCEPT);
     ADDOP(c, loc, CLEANUP_ASYNC_THROW);
+    ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, done);
+
+    USE_LABEL(c, throw_cleanup);
+    POP_EXCEPT_AND_RERAISE(c, NO_LOCATION);
+
     USE_LABEL(c, done);
     return SUCCESS;
 }

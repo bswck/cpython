@@ -1752,6 +1752,42 @@ class TestPEP828Extras(unittest.TestCase):
         self.assertIs(caught.exception, error)
         self.assertIsInstance(error.__context__, GeneratorExit)
 
+    def test_delegate_throw_claims_child_while_awaiting(self):
+        async def child():
+            try:
+                yield 1
+            except ValueError:
+                await async_yield('recovering')
+                received = yield 42
+                yield received
+
+        async def delegate(iterator):
+            yield from iterator
+
+        iterator = child()
+        gen = delegate(iterator)
+        with self.assertRaises(StopIteration) as caught:
+            anext(gen).send(None)
+        self.assertEqual(caught.exception.value, 1)
+
+        recovery = gen.athrow(ValueError())
+        self.assertEqual(recovery.send(None), 'recovering')
+        self.assertTrue(iterator.ag_running)
+        for operation in (anext(iterator), iterator.asend(99),
+                          iterator.athrow(TypeError()), iterator.aclose()):
+            with self.assertRaisesRegex(RuntimeError, 'already running'):
+                operation.send(None)
+
+        with self.assertRaises(StopIteration) as caught:
+            recovery.send(None)
+        self.assertEqual(caught.exception.value, 42)
+        self.assertFalse(iterator.ag_running)
+        with self.assertRaises(StopIteration) as caught:
+            gen.asend(99).send(None)
+        self.assertEqual(caught.exception.value, 99)
+        with self.assertRaises(StopIteration):
+            gen.aclose().send(None)
+
     @_async_test
     async def test_missing_stop_async_iteration_value(self):
         class UninitializedStop(StopAsyncIteration):

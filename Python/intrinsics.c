@@ -220,6 +220,18 @@ make_frozenset(PyThreadState* Py_UNUSED(ignored), PyObject *set)
 #define INTRINSIC_FUNC_ENTRY(N, F) \
     [N] = {F, #N},
 
+static PyObject *
+async_gen_get_throw(PyThreadState *Py_UNUSED(tstate), PyObject *iterator)
+{
+    PyObject *method;
+    PyObject *name = PyAsyncGen_CheckExact(iterator)
+        ? &_Py_ID(athrow) : &_Py_ID(throw);
+    if (PyObject_GetOptionalAttr(iterator, name, &method) < 0) {
+        return NULL;
+    }
+    return method ? method : Py_NewRef(Py_None);
+}
+
 const intrinsic_func1_info
 _PyIntrinsics_UnaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_1_INVALID, no_intrinsic1)
@@ -235,6 +247,7 @@ _PyIntrinsics_UnaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SUBSCRIPT_GENERIC, _Py_subscript_generic)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_TYPEALIAS, _Py_make_typealias)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_BUILD_FROZENSET, make_frozenset)
+    INTRINSIC_FUNC_ENTRY(INTRINSIC_ASYNC_GEN_GET_THROW, async_gen_get_throw)
 };
 
 
