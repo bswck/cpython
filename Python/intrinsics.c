@@ -224,9 +224,7 @@ static PyObject *
 async_gen_get_throw(PyThreadState *Py_UNUSED(tstate), PyObject *iterator)
 {
     PyObject *method;
-    PyObject *name = PyAsyncGen_CheckExact(iterator)
-        ? &_Py_ID(athrow) : &_Py_ID(throw);
-    if (PyObject_GetOptionalAttr(iterator, name, &method) < 0) {
+    if (PyObject_GetOptionalAttr(iterator, &_Py_ID(athrow), &method) < 0) {
         return NULL;
     }
     return method ? method : Py_NewRef(Py_None);

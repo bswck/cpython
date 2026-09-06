@@ -602,12 +602,7 @@ class TestPEP828Operation(unittest.TestCase):
             gi = g()
             self.assertEqual(await anext(gi), 1)
             await gi.athrow(AttributeError)
-        # Attribute lookup can fail before the exception reaches the frame.
-        # Finish the generator explicitly rather than during finalization.
-        try:
-            await gi.aclose()
-        except ZeroDivisionError:
-            pass
+        self.assertIsNone(gi.ag_frame)
 
         with self.assertRaises(ZeroDivisionError):
             gi = g()
@@ -1787,6 +1782,106 @@ class TestPEP828Extras(unittest.TestCase):
         self.assertEqual(caught.exception.value, 99)
         with self.assertRaises(StopIteration):
             gen.aclose().send(None)
+
+    def test_custom_delegate_async_methods(self):
+        class Iterator:
+            closed = False
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                return 1
+
+            async def athrow(self, exception):
+                self.exception = exception
+                await async_yield('recovering')
+                return 42
+
+            async def aclose(self):
+                await async_yield('closing')
+                self.closed = True
+
+            def throw(self, exception):
+                raise AssertionError('synchronous throw called')
+
+            def close(self):
+                raise AssertionError('synchronous close called')
+
+        async def delegate(iterator):
+            yield from iterator
+
+        iterator = Iterator()
+        gen = delegate(iterator)
+        with self.assertRaises(StopIteration) as caught:
+            anext(gen).send(None)
+        self.assertEqual(caught.exception.value, 1)
+        exception = ValueError('recoverable')
+        recovery = gen.athrow(exception)
+        self.assertEqual(recovery.send(None), 'recovering')
+        self.assertIs(iterator.exception, exception)
+        with self.assertRaises(StopIteration) as caught:
+            recovery.send(None)
+        self.assertEqual(caught.exception.value, 42)
+        closing = gen.aclose()
+        self.assertEqual(closing.send(None), 'closing')
+        self.assertFalse(iterator.closed)
+        with self.assertRaises(StopIteration):
+            closing.send(None)
+        self.assertTrue(iterator.closed)
+
+    @_async_test
+    async def test_custom_delegate_throw_exhaustion(self):
+        class Iterator:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                return 1
+
+        async def async_throw(self, exception):
+            raise StopAsyncIteration(value)
+
+        def sync_throw(self, exception):
+            raise StopAsyncIteration(value)
+
+        async def delegate():
+            yield (yield from Iterator())
+
+        for method in (sync_throw, async_throw):
+            Iterator.athrow = method
+            for value in (None, 42, (1, 2)):
+                with self.subTest(method=method, value=value):
+                    gen = delegate()
+                    self.assertEqual(await anext(gen), 1)
+                    self.assertEqual(await gen.athrow(ValueError()), value)
+                    await gen.aclose()
+
+    @_async_test
+    async def test_custom_delegate_methods_require_awaitables(self):
+        class Iterator:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                return 1
+
+            def athrow(self, exception):
+                return 42
+
+            def aclose(self):
+                return 42
+
+        async def delegate():
+            yield from Iterator()
+
+        for closing in (False, True):
+            gen = delegate()
+            self.assertEqual(await anext(gen), 1)
+            operation = gen.aclose() if closing else gen.athrow(ValueError())
+            with self.assertRaisesRegex(TypeError, "can't be awaited"):
+                await operation
+            self.assertIsNone(gen.ag_frame)
 
     @_async_test
     async def test_missing_stop_async_iteration_value(self):
