@@ -1988,7 +1988,8 @@ dummy_func(
 
             int matches = PyErr_GivenExceptionMatches(exc_value, PyExc_StopAsyncIteration);
             if (matches) {
-                value = PyStackRef_FromPyObjectNew(((PyStopAsyncIterationObject *)exc_value)->value);
+                PyObject *result = ((PyStopAsyncIterationObject *)exc_value)->value;
+                value = PyStackRef_FromPyObjectNew(result ? result : Py_None);
                 DECREF_INPUTS();
             }
             else {

@@ -1694,6 +1694,28 @@ class TestPEP828Extras(unittest.TestCase):
     """
 
     @_async_test
+    async def test_missing_stop_async_iteration_value(self):
+        class UninitializedStop(StopAsyncIteration):
+            def __init__(self):
+                pass
+
+        class Iterator:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise exception
+
+        async def delegate():
+            yield (yield from Iterator())
+
+        deleted_value = StopAsyncIteration(42)
+        del deleted_value.value
+        for exception in (UninitializedStop(), deleted_value):
+            with self.subTest(exception=type(exception)):
+                self.assertEqual([item async for item in delegate()], [None])
+
+    @_async_test
     async def test_delegate_exception(self):
         yielded_first = sentinel("yielded_first")
         yielded_second = sentinel("yielded_second")
