@@ -287,6 +287,22 @@ add_conditional_annotation(PyThreadState* tstate, PyObject *conditional_annotati
     Py_RETURN_NONE;
 }
 
+static PyObject *
+async_gen_close(PyThreadState *tstate, PyObject *iterator, PyObject *exception)
+{
+    PyObject *method;
+    if (PyObject_GetOptionalAttr(iterator, &_Py_ID(aclose), &method) < 0) {
+        return NULL;
+    }
+    if (method == NULL) {
+        _PyErr_SetRaisedException(tstate, Py_NewRef(exception));
+        return NULL;
+    }
+    PyObject *result = PyObject_CallNoArgs(method);
+    Py_DECREF(method);
+    return result;
+}
+
 const intrinsic_func2_info
 _PyIntrinsics_BinaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_2_INVALID, no_intrinsic2)
@@ -296,6 +312,7 @@ _PyIntrinsics_BinaryFunctions[] = {
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_FUNCTION_TYPE_PARAMS, _Py_set_function_type_params)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_SET_TYPEPARAM_DEFAULT, _Py_set_typeparam_default)
     INTRINSIC_FUNC_ENTRY(INTRINSIC_ADD_CONDITIONAL_ANNOTATION, add_conditional_annotation)
+    INTRINSIC_FUNC_ENTRY(INTRINSIC_ASYNC_GEN_CLOSE, async_gen_close)
 };
 
 #undef INTRINSIC_FUNC_ENTRY

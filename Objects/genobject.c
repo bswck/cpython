@@ -654,6 +654,13 @@ _gen_throw(PyGenObject *gen,
         PyObject *ret;
         int err;
         if (PyErr_GivenExceptionMatches(typ, PyExc_GeneratorExit)) {
+            if (PyAsyncGen_CheckExact(gen) && is_resume(frame->instr_ptr) &&
+                (frame->instr_ptr->op.arg & RESUME_OPARG_LOCATION_MASK) ==
+                    RESUME_AFTER_YIELD_FROM) {
+                // The delegating frame awaits aclose() before re-raising.
+                Py_DECREF(yf);
+                goto throw_here;
+            }
             /* Asynchronous generators *should not* be closed right away.
                We have to allow some awaits to work it through, hence the
                `close_on_genexit` parameter here.

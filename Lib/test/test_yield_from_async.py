@@ -12,7 +12,10 @@ import sys
 from functools import partial
 
 lazy from test import test_yield_from
-from test.support import captured_stderr, disable_gc, gc_collect, run_no_yield_async_fn, catch_unraisable_exception
+from test.support import (
+    async_yield, captured_stderr, disable_gc, gc_collect,
+    run_no_yield_async_fn,
+)
 
 _async_test = partial(partial, run_no_yield_async_fn)
 
@@ -599,13 +602,17 @@ class TestPEP828Operation(unittest.TestCase):
             gi = g()
             self.assertEqual(await anext(gi), 1)
             await gi.athrow(AttributeError)
+        # Attribute lookup can fail before the exception reaches the frame.
+        # Finish the generator explicitly rather than during finalization.
+        try:
+            await gi.aclose()
+        except ZeroDivisionError:
+            pass
 
-        with catch_unraisable_exception() as cm:
+        with self.assertRaises(ZeroDivisionError):
             gi = g()
             self.assertEqual(await anext(gi), 1)
             await gi.aclose()
-
-            self.assertEqual(ZeroDivisionError, cm.unraisable.exc_type)
 
     @_async_test
     async def test_exception_in_initial_next_call_ayf(self):
@@ -1005,7 +1012,7 @@ class TestPEP828Operation(unittest.TestCase):
             async def __anext__(self):
                 return 42
             async def aclose(self_):
-                self.assertTrue(g1.gi_running)
+                self.assertTrue(g1.ag_running)
                 with self.assertRaises(RuntimeError):
                     await anext(g1)
         async def one():
@@ -1506,22 +1513,19 @@ class TestInterestingEdgeCases(unittest.TestCase):
         with self.subTest("aclose"):
             g = outer()
             self.assertIs(await anext(g), yielded_first)
-            # No chaining happens. This is analogous to PEP 342:
-            # https://peps.python.org/pep-0342/#new-generator-method-close
+            # The delegate's aclose() is awaited while handling GeneratorExit.
             with self.assert_generator_ignored_generator_exit() as caught:
                 await g.aclose()
-            self.assertIsNone(caught.exception.__context__)
+            self.assertIsInstance(caught.exception.__context__, GeneratorExit)
             await self.assert_stop_iteration(g)
 
         with self.subTest("athrow GeneratorExit"):
             g = outer()
             self.assertIs(await anext(g), yielded_first)
             thrown = GeneratorExit()
-            # No chaining happens. This is analogous to PEP 342:
-            # https://peps.python.org/pep-0342/#new-generator-method-close
             with self.assert_generator_ignored_generator_exit() as caught:
                 await g.athrow(thrown)
-            self.assertIsNone(caught.exception.__context__)
+            self.assertIs(caught.exception.__context__, thrown)
             await self.assert_stop_iteration(g)
 
         with self.subTest("athrow StopAsyncIteration"):
@@ -1693,6 +1697,60 @@ class TestPEP828Extras(unittest.TestCase):
     ``TestPEP828Operation`` or ``TestInterestingEdgeCases`` and are
     parity-checked against ``test_yield_from``.
     """
+
+    def test_delegate_close_awaits_cleanup(self):
+        async def child():
+            try:
+                yield 1
+            finally:
+                await async_yield('cleanup started')
+                await async_yield('cleanup continued')
+                events.append('cleanup finished')
+
+        async def delegate(iterator):
+            yield from iterator
+
+        for depth in (1, 3):
+            for use_aclose in (True, False):
+                with self.subTest(depth=depth, use_aclose=use_aclose):
+                    events = []
+                    generators = [child()]
+                    for _ in range(depth):
+                        generators.append(delegate(generators[-1]))
+                    gen = generators[-1]
+                    with self.assertRaises(StopIteration) as caught:
+                        anext(gen).send(None)
+                    self.assertEqual(caught.exception.value, 1)
+                    closing = gen.aclose() if use_aclose else gen.athrow(GeneratorExit())
+                    self.assertEqual(closing.send(None), 'cleanup started')
+                    self.assertEqual(closing.send(None), 'cleanup continued')
+                    with self.assertRaises(StopIteration if use_aclose else GeneratorExit):
+                        closing.send(None)
+                    self.assertEqual(events, ['cleanup finished'])
+                    self.assertTrue(all(g.ag_frame is None for g in generators))
+
+    def test_delegate_close_propagates_cleanup_error(self):
+        error = ValueError('cleanup failed')
+
+        async def child():
+            try:
+                yield 1
+            finally:
+                await async_yield('cleanup')
+                raise error
+
+        async def delegate():
+            yield from child()
+
+        gen = delegate()
+        with self.assertRaises(StopIteration):
+            anext(gen).send(None)
+        closing = gen.aclose()
+        self.assertEqual(closing.send(None), 'cleanup')
+        with self.assertRaises(ValueError) as caught:
+            closing.send(None)
+        self.assertIs(caught.exception, error)
+        self.assertIsInstance(error.__context__, GeneratorExit)
 
     @_async_test
     async def test_missing_stop_async_iteration_value(self):

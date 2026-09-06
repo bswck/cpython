@@ -45,7 +45,7 @@ _common_constants = [builtins.AssertionError, builtins.NotImplementedError,
                      # Append-only — must match CONSTANT_* in
                      # Include/internal/pycore_opcode_utils.h.
                      None, "", True, False, -1, builtins.frozenset, (),
-                     builtins.aiter, builtins.anext]
+                     builtins.aiter, builtins.anext, builtins.GeneratorExit]
 _nb_ops = _opcode.get_nb_ops()
 
 hascompare = [opmap["COMPARE_OP"]]

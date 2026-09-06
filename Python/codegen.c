@@ -515,12 +515,19 @@ codegen_add_yield_from(compiler *c, location loc, int await)
 }
 
 static int
+codegen_pop_except_and_reraise(compiler *c, location loc);
+
+static int
 codegen_yield_from_async(compiler *c, location loc, expr_ty e)
 {
     NEW_JUMP_TARGET_LABEL(c, send);
     NEW_JUMP_TARGET_LABEL(c, exit);
     NEW_JUMP_TARGET_LABEL(c, use_anext);
     NEW_JUMP_TARGET_LABEL(c, got_coroutine);
+    NEW_JUMP_TARGET_LABEL(c, thrown);
+    NEW_JUMP_TARGET_LABEL(c, not_close);
+    NEW_JUMP_TARGET_LABEL(c, close_cleanup);
+    NEW_JUMP_TARGET_LABEL(c, done);
 
     ADDOP_I(c, loc, LOAD_COMMON_CONSTANT, CONSTANT_BUILTIN_AITER);
     ADDOP(c, loc, PUSH_NULL);
@@ -564,7 +571,7 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     ADDOP(c, loc, POP_TOP);
 
     ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_ASYNC_GEN_WRAP);
-    ADDOP_JUMP(c, loc, SETUP_FINALLY, exit);
+    ADDOP_JUMP(c, loc, SETUP_FINALLY, thrown);
     // A suspended delegation keeps the delegate at stack_top[-2].
     ADDOP_I(c, loc, COPY, 2);
     ADDOP_I(c, loc, SWAP, 2);
@@ -580,6 +587,33 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     ADDOP_I(c, loc, SWAP, 2);
     ADDOP(c, loc, POP_TOP);
     ADDOP(c, loc, CLEANUP_ASYNC_THROW);
+    ADDOP_JUMP(c, loc, JUMP_NO_INTERRUPT, done);
+
+    USE_LABEL(c, thrown);
+    ADDOP_I(c, loc, SWAP, 2);
+    ADDOP(c, loc, POP_TOP);
+    // Stack: [aiterator, exception]. Closing must be awaited in this frame.
+    ADDOP_I(c, loc, LOAD_COMMON_CONSTANT, CONSTANT_GENERATOREXIT);
+    ADDOP(c, loc, CHECK_EXC_MATCH);
+    ADDOP_JUMP(c, loc, POP_JUMP_IF_FALSE, not_close);
+    ADDOP_JUMP(c, NO_LOCATION, SETUP_CLEANUP, close_cleanup);
+    ADDOP(c, NO_LOCATION, PUSH_EXC_INFO);
+    ADDOP_I(c, loc, COPY, 3);
+    ADDOP_I(c, loc, COPY, 2);
+    ADDOP_I(c, loc, CALL_INTRINSIC_2, INTRINSIC_ASYNC_GEN_CLOSE);
+    ADDOP_I(c, loc, GET_AWAITABLE, 0);
+    ADDOP(c, loc, PUSH_NULL);
+    ADDOP_LOAD_CONST(c, loc, Py_None);
+    ADD_YIELD_FROM(c, loc, 1);
+    ADDOP(c, loc, POP_TOP);
+    ADDOP_I(c, loc, RERAISE, 0);
+
+    USE_LABEL(c, close_cleanup);
+    POP_EXCEPT_AND_RERAISE(c, NO_LOCATION);
+
+    USE_LABEL(c, not_close);
+    ADDOP(c, loc, CLEANUP_ASYNC_THROW);
+    USE_LABEL(c, done);
     return SUCCESS;
 }
 

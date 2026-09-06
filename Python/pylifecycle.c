@@ -902,6 +902,7 @@ pycore_init_builtins(PyThreadState *tstate)
         PyDict_GetItemWithError(builtins_dict, &_Py_ID(aiter));
     common_objs[CONSTANT_BUILTIN_ANEXT] =
         PyDict_GetItemWithError(builtins_dict, &_Py_ID(anext));
+    common_objs[CONSTANT_GENERATOREXIT] = PyExc_GeneratorExit;
     if (common_objs[CONSTANT_BUILTIN_AITER] == NULL ||
         common_objs[CONSTANT_BUILTIN_ANEXT] == NULL) {
         goto error;
