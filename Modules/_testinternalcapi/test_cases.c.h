@@ -5806,6 +5806,39 @@
             DISPATCH();
         }
 
+        TARGET(COPY_DICT) {
+            #if _Py_TAIL_CALL_INTERP
+            int opcode = COPY_DICT;
+            (void)(opcode);
+            #endif
+            frame->instr_ptr = next_instr;
+            next_instr += 1;
+            INSTRUCTION_STATS(COPY_DICT);
+            _PyStackRef template;
+            _PyStackRef map;
+            template = stack_pointer[-1];
+            PyObject *template_o = PyStackRef_AsPyObjectBorrow(template);
+            assert(PyFrozenDict_CheckExact(template_o));
+            _PyFrame_SetStackPointer(frame, stack_pointer);
+            _PyFrame_StackPointerValidate(frame);
+            PyObject *map_o = _PyDict_CopyAsDict(template_o);
+            _PyFrame_StackPointerInvalidate(frame);
+            stack_pointer += -1;
+            ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
+            _PyFrame_SetStackPointer(frame, stack_pointer);
+            _PyFrame_StackPointerValidate(frame);
+            PyStackRef_CLOSE(template);
+            _PyFrame_StackPointerInvalidate(frame);
+            if (map_o == NULL) {
+                JUMP_TO_LABEL(error);
+            }
+            map = PyStackRef_FromPyObjectStealMortal(map_o);
+            stack_pointer[0] = map;
+            stack_pointer += 1;
+            ASSERT_WITHIN_STACK_BOUNDS(__FILE__, __LINE__);
+            DISPATCH();
+        }
+
         TARGET(COPY_FREE_VARS) {
             #if _Py_TAIL_CALL_INTERP
             int opcode = COPY_FREE_VARS;

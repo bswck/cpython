@@ -2,6 +2,7 @@
 #include "opcode.h"
 
 #include "pycore_code.h"          // _PyCodeConstructor
+#include "pycore_dict.h"          // _PyDict_FromItems()
 #include "pycore_function.h"      // _PyFunction_ClearCodeByVersion()
 #include "pycore_hashtable.h"     // _Py_hashtable_t
 #include "pycore_index_pool.h"    // _PyIndexPool_Fini()
@@ -247,6 +248,40 @@ intern_constants(PyObject *tuple, int *modified)
                 }
             }
             Py_DECREF(tmp);
+        }
+        else if (PyFrozenDict_CheckExact(v)) {
+            Py_ssize_t size = PyDict_GET_SIZE(v);
+            PyObject *items = PyTuple_New(2 * size);
+            if (items == NULL) {
+                return -1;
+            }
+            Py_ssize_t pos = 0, j = 0;
+            PyObject *key, *value;
+            while (PyDict_Next(v, &pos, &key, &value)) {
+                PyTuple_SET_ITEM(items, j++, Py_NewRef(key));
+                PyTuple_SET_ITEM(items, j++, Py_NewRef(value));
+            }
+            int items_modified = 0;
+            if (intern_constants(items, &items_modified) < 0) {
+                Py_DECREF(items);
+                return -1;
+            }
+            if (items_modified) {
+                PyObject **data = _PyTuple_ITEMS(items);
+                PyObject *dict = _PyDict_FromItems(data, 2, data + 1, 2, size);
+                PyObject *frozen = dict == NULL ? NULL : PyFrozenDict_New(dict);
+                Py_XDECREF(dict);
+                if (frozen == NULL) {
+                    Py_DECREF(items);
+                    return -1;
+                }
+                PyTuple_SET_ITEM(tuple, i, frozen);
+                Py_SETREF(v, frozen);
+                if (modified) {
+                    *modified = 1;
+                }
+            }
+            Py_DECREF(items);
         }
 #ifdef Py_GIL_DISABLED
         else if (PySlice_Check(v)) {
@@ -3046,6 +3081,33 @@ _PyCode_ConstantKey(PyObject *op)
         key = _PyTuple_FromPair(set, op);
         Py_DECREF(set);
         return key;
+    }
+    else if (PyFrozenDict_CheckExact(op)) {
+        /* Mapping equality ignores insertion order and numeric types, both
+         * of which remain observable when a constant template is copied. */
+        PyObject *items = PyTuple_New(2 * PyDict_GET_SIZE(op) + 1);
+        if (items == NULL) {
+            return NULL;
+        }
+        PyTuple_SET_ITEM(items, 0, Py_NewRef((PyObject *)&PyFrozenDict_Type));
+        Py_ssize_t pos = 0, i = 1;
+        PyObject *k, *v;
+        while (PyDict_Next(op, &pos, &k, &v)) {
+            PyObject *kk = _PyCode_ConstantKey(k);
+            if (kk == NULL) {
+                Py_DECREF(items);
+                return NULL;
+            }
+            PyTuple_SET_ITEM(items, i++, kk);
+            PyObject *vk = _PyCode_ConstantKey(v);
+            if (vk == NULL) {
+                Py_DECREF(items);
+                return NULL;
+            }
+            PyTuple_SET_ITEM(items, i++, vk);
+        }
+        key = _PyTuple_FromPair(items, op);
+        Py_DECREF(items);
     }
     else if (PySlice_Check(op)) {
         PySliceObject *slice = (PySliceObject *)op;

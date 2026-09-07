@@ -3,6 +3,7 @@
 #include "pycore_c_array.h"       // _Py_CArray_EnsureCapacity
 #include "pycore_flowgraph.h"
 #include "pycore_compile.h"
+#include "pycore_dict.h"          // _PyDict_CopyAsDict()
 #include "pycore_intrinsics.h"
 #include "pycore_pymem.h"         // _PyMem_IsPtrFreed()
 #include "pycore_long.h"          // _PY_IS_SMALL_INT()
@@ -1784,6 +1785,17 @@ const_folding_check_complexity(PyObject *obj, Py_ssize_t limit)
             }
         }
     }
+    else if (PyFrozenDict_CheckExact(obj)) {
+        Py_ssize_t pos = 0;
+        PyObject *key, *value;
+        limit -= 2 * PyDict_GET_SIZE(obj);
+        while (limit >= 0 && PyDict_Next(obj, &pos, &key, &value)) {
+            limit = const_folding_check_complexity(key, limit);
+            if (limit >= 0) {
+                limit = const_folding_check_complexity(value, limit);
+            }
+        }
+    }
     return limit;
 }
 
@@ -1791,6 +1803,185 @@ const_folding_check_complexity(PyObject *obj, Py_ssize_t limit)
 #define MAX_COLLECTION_SIZE    256  /* items */
 #define MAX_STR_SIZE          4096  /* characters */
 #define MAX_TOTAL_ITEMS       1024  /* including nested collections */
+
+/* Fold a straight-line dictionary construction into LOAD_CONST, COPY_DICT.
+ * Besides BUILD_MAP, recognize the MAP_ADD / DICT_UPDATE sequences emitted
+ * for large literals. Stop at any other operation: values with side effects
+ * and mutable nested dictionaries must still be evaluated at runtime.
+ */
+static int
+fold_dict_of_constants(basicblock *bb, int i, PyObject *consts,
+                       PyObject *const_cache, _Py_hashtable_t *consts_index)
+{
+    if (bb->b_instr[i].i_opcode == BUILD_MAP && bb->b_instr[i].i_oparg < 2) {
+        return SUCCESS;
+    }
+    int needed = 1;
+    int start = i;
+    int instructions = 0;
+    for (; start >= 0; start--) {
+        cfg_instr *inst = &bb->b_instr[start];
+        int op = inst->i_opcode;
+        if (op == NOP) {
+            continue;
+        }
+        if (++instructions > MAX_TOTAL_ITEMS) {
+            return SUCCESS;
+        }
+        if (loads_const(op)) {
+            needed--;
+        }
+        else if (op == BUILD_MAP) {
+            if (inst->i_oparg > MAX_COLLECTION_SIZE) {
+                return SUCCESS;
+            }
+            needed += 2 * inst->i_oparg - 1;
+        }
+        else if (op == MAP_ADD && inst->i_oparg == 1) {
+            needed += 2;
+        }
+        else if (op == DICT_UPDATE && inst->i_oparg == 1) {
+            needed++;
+        }
+        else if (op != COPY_DICT) {
+            return SUCCESS;
+        }
+        if (needed == 0) {
+            break;
+        }
+        if (needed > 2 * MAX_COLLECTION_SIZE) {
+            return SUCCESS;
+        }
+    }
+    if (start < 0 || start == i) {
+        return SUCCESS;
+    }
+
+    PyObject *stack[2 * MAX_COLLECTION_SIZE];
+    int depth = 0;
+    int result = SUCCESS;
+    Py_ssize_t budget = MAX_TOTAL_ITEMS;
+    for (int pos = start; pos <= i; pos++) {
+        cfg_instr *inst = &bb->b_instr[pos];
+        int op = inst->i_opcode;
+        if (op == NOP) {
+            continue;
+        }
+        if (loads_const(op)) {
+            if (depth == Py_ARRAY_LENGTH(stack)) {
+                goto done;
+            }
+            PyObject *value = get_const_value(op, inst->i_oparg, consts);
+            if (value == NULL) {
+                result = ERROR;
+                goto done;
+            }
+            stack[depth++] = value;
+            budget = const_folding_check_complexity(value, budget - 1);
+            if (budget < 0) {
+                goto done;
+            }
+            continue;
+        }
+        if (op == COPY_DICT) {
+            if (depth < 1 || !PyFrozenDict_CheckExact(stack[depth - 1])) {
+                goto done;
+            }
+            PyObject *dict = _PyDict_CopyAsDict(stack[depth - 1]);
+            if (dict == NULL) {
+                goto done;
+            }
+            Py_SETREF(stack[depth - 1], dict);
+        }
+        else if (op == BUILD_MAP || op == MAP_ADD) {
+            int count = op == BUILD_MAP ? inst->i_oparg : 1;
+            if (count == 0 && depth == Py_ARRAY_LENGTH(stack)) {
+                goto done;
+            }
+            int base = depth - 2 * count;
+            if (base < (op == MAP_ADD) ||
+                (op == MAP_ADD && !PyDict_CheckExact(stack[base - 1])))
+            {
+                goto done;
+            }
+            /* A dict built by this evaluator is mutable, so it cannot be
+             * shared as a key or value of a constant template. */
+            for (int j = base; j < depth; j++) {
+                if (PyDict_Check(stack[j])) {
+                    goto done;
+                }
+            }
+            PyObject *dict = op == BUILD_MAP ? PyDict_New() :
+                             Py_NewRef(stack[base - 1]);
+            if (dict == NULL) {
+                goto done;
+            }
+            for (int j = base; j < depth; j += 2) {
+                if (PyDict_SetItem(dict, stack[j], stack[j + 1]) < 0) {
+                    Py_DECREF(dict);
+                    goto done;
+                }
+            }
+            while (depth > base) {
+                Py_DECREF(stack[--depth]);
+            }
+            if (op == MAP_ADD) {
+                Py_DECREF(stack[--depth]);
+            }
+            stack[depth++] = dict;
+        }
+        else {
+            assert(op == DICT_UPDATE);
+            if (depth < 2 || !PyDict_CheckExact(stack[depth - 2]) ||
+                !PyDict_CheckExact(stack[depth - 1]))
+            {
+                goto done;
+            }
+            if (PyDict_Update(stack[depth - 2], stack[depth - 1]) < 0) {
+                goto done;
+            }
+            Py_DECREF(stack[--depth]);
+        }
+        if (PyDict_GET_SIZE(stack[depth - 1]) > MAX_COLLECTION_SIZE) {
+            goto done;
+        }
+    }
+    if (depth != 1 || !PyDict_CheckExact(stack[0]) ||
+        PyDict_GET_SIZE(stack[0]) < 2)
+    {
+        goto done;
+    }
+    PyObject *frozen = PyFrozenDict_New(stack[0]);
+    if (frozen == NULL) {
+        goto done;
+    }
+    int index = add_const(frozen, consts, const_cache, consts_index);
+    if (index < 0) {
+        result = ERROR;
+        goto done;
+    }
+    for (int pos = start; pos < i; pos++) {
+        cfg_instr *inst = &bb->b_instr[pos];
+        INSTR_SET_OP0(inst, NOP);
+        INSTR_SET_LOC(inst, NO_LOCATION);
+    }
+    INSTR_SET_OP1(&bb->b_instr[start], LOAD_CONST, index);
+    INSTR_SET_LOC(&bb->b_instr[start], bb->b_instr[i].i_loc);
+    INSTR_SET_OP0(&bb->b_instr[i], COPY_DICT);
+
+done:
+    while (depth) {
+        Py_DECREF(stack[--depth]);
+    }
+    if (result == SUCCESS && PyErr_Occurred()) {
+        if (PyErr_ExceptionMatches(PyExc_KeyboardInterrupt)) {
+            return ERROR;
+        }
+        /* Invalid keys and other failed folds must still raise at runtime. */
+        PyErr_Clear();
+    }
+    return result;
+}
 
 static PyObject *
 const_folding_safe_multiply(PyObject *v, PyObject *w)
@@ -2622,6 +2813,19 @@ optimize_basic_block(PyObject *const_cache, basicblock *bb, PyObject *consts,
             case BINARY_OP:
                 RETURN_IF_ERROR(fold_const_binop(bb, i, consts, const_cache, consts_index));
                 break;
+        }
+    }
+
+    /* Visit complete dictionaries before their prefixes, after folding their
+     * keys and values. This avoids repeatedly freezing growing templates. */
+    for (int i = bb->b_iused - 1; i >= 0; i--) {
+        cfg_instr *inst = &bb->b_instr[i];
+        if (inst->i_opcode == BUILD_MAP ||
+            ((inst->i_opcode == MAP_ADD || inst->i_opcode == DICT_UPDATE) &&
+             inst->i_oparg == 1))
+        {
+            RETURN_IF_ERROR(fold_dict_of_constants(
+                bb, i, consts, const_cache, consts_index));
         }
     }
 

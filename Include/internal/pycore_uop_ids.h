@@ -378,6 +378,7 @@ enum {
 #define _CHECK_EG_MATCH CHECK_EG_MATCH
 #define _CHECK_EXC_MATCH CHECK_EXC_MATCH
 #define _CONVERT_VALUE CONVERT_VALUE
+#define _COPY_DICT COPY_DICT
 #define _COPY_FREE_VARS COPY_FREE_VARS
 #define _DELETE_DEREF DELETE_DEREF
 #define _DELETE_FAST DELETE_FAST
@@ -643,6 +644,7 @@ enum {
     _COPY_3_r13,
     _COPY_3_r23,
     _COPY_3_r33,
+    _COPY_DICT_r11,
     _COPY_FREE_VARS_r00,
     _COPY_FREE_VARS_r11,
     _COPY_FREE_VARS_r22,
@@ -1439,7 +1441,7 @@ enum {
     _WITH_EXCEPT_START_r33,
     _YIELD_VALUE_r11,
 };
-#define MAX_UOP_REGS_ID 1650
+#define MAX_UOP_REGS_ID 1651
 
 #ifdef __cplusplus
 }

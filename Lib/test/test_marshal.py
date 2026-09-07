@@ -722,12 +722,39 @@ class InstancingTestCase(unittest.TestCase, HelperMixin):
                     marshal.dumps(dictobj, version)
 
     def testModule(self):
-        with open(__file__, "rb") as f:
-            code = f.read()
-        if __file__.endswith(".py"):
-            code = compile(code, __file__, "exec")
+        # Keep this fixture representable in all the formats tested below.
+        # This test module itself can contain slice/frozendict constants.
+        code = compile("def f(x):\n    return x + (1, 2)\n", __file__, "exec")
         self.helper(code)
         self.helper3(code)
+
+    def test_constant_dict_code(self):
+        code = compile("{'a': 1, 'b': 2}", __file__, "eval")
+        self.assertTrue(any(type(c) is frozendict for c in code.co_consts))
+        for version in range(6):
+            with self.subTest(version=version):
+                with self.assertRaises(ValueError):
+                    marshal.dumps(code, version)
+        for version in range(6, marshal.version + 1):
+            with self.subTest(version=version):
+                copy = marshal.loads(marshal.dumps(code, version))
+                self.assertEqual(eval(copy), {'a': 1, 'b': 2})
+                self.assertIsNot(eval(copy), eval(copy))
+
+    def test_constant_dict_code_hash_seed(self):
+        expected = {f'key{i}': i for i in range(32)}
+        code = compile(repr(expected), __file__, 'eval')
+        payload = marshal.dumps(code).hex()
+        script = f"""
+import marshal
+code = marshal.loads(bytes.fromhex({payload!r}))
+result = eval(code)
+assert list(result.items()) == {list(expected.items())!r}
+assert all(result[f'key{{i}}'] == i for i in range(32))
+"""
+        for seed in ('1', '42', '8675309'):
+            with self.subTest(seed=seed):
+                assert_python_ok('-c', script, PYTHONHASHSEED=seed)
 
     def testRecursion(self):
         obj = 1.2345
@@ -740,10 +767,8 @@ class InstancingTestCase(unittest.TestCase, HelperMixin):
 
 class CompatibilityTestCase(unittest.TestCase):
     def _test(self, version):
-        with open(__file__, "rb") as f:
-            code = f.read()
-        if __file__.endswith(".py"):
-            code = compile(code, __file__, "exec")
+        # Test legacy code serialization without newer constant types.
+        code = compile("def f(x):\n    return x + (1, 2)\n", __file__, "exec")
         data = marshal.dumps(code, version)
         marshal.loads(data)
 

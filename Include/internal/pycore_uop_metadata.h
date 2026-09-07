@@ -211,6 +211,7 @@ const uint32_t _PyUop_Flags[MAX_UOP_ID+1] = {
     [_LIST_EXTEND] = HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG,
     [_SET_UPDATE] = HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG,
     [_BUILD_SET] = HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ESCAPES_FLAG,
+    [_COPY_DICT] = HAS_ERROR_FLAG | HAS_ESCAPES_FLAG,
     [_BUILD_MAP] = HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ESCAPES_FLAG,
     [_SETUP_ANNOTATIONS] = HAS_ERROR_FLAG | HAS_ESCAPES_FLAG,
     [_DICT_UPDATE] = HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG,
@@ -2025,6 +2026,15 @@ const _PyUopCachingInfo _PyUop_Caching[MAX_UOP_ID+1] = {
         .entries = {
             { 1, 0, _BUILD_SET_r01 },
             { -1, -1, -1 },
+            { -1, -1, -1 },
+            { -1, -1, -1 },
+        },
+    },
+    [_COPY_DICT] = {
+        .best = { 1, 1, 1, 1 },
+        .entries = {
+            { -1, -1, -1 },
+            { 1, 1, _COPY_DICT_r11 },
             { -1, -1, -1 },
             { -1, -1, -1 },
         },
@@ -4333,6 +4343,7 @@ const uint16_t _PyUop_Uncached[MAX_UOP_REGS_ID+1] = {
     [_LIST_EXTEND_r11] = _LIST_EXTEND,
     [_SET_UPDATE_r11] = _SET_UPDATE,
     [_BUILD_SET_r01] = _BUILD_SET,
+    [_COPY_DICT_r11] = _COPY_DICT,
     [_BUILD_MAP_r01] = _BUILD_MAP,
     [_SETUP_ANNOTATIONS_r00] = _SETUP_ANNOTATIONS,
     [_DICT_UPDATE_r11] = _DICT_UPDATE,
@@ -5147,6 +5158,8 @@ const char *const _PyOpcode_uop_name[MAX_UOP_REGS_ID+1] = {
     [_COPY_3_r13] = "_COPY_3_r13",
     [_COPY_3_r23] = "_COPY_3_r23",
     [_COPY_3_r33] = "_COPY_3_r33",
+    [_COPY_DICT] = "_COPY_DICT",
+    [_COPY_DICT_r11] = "_COPY_DICT_r11",
     [_COPY_FREE_VARS] = "_COPY_FREE_VARS",
     [_COPY_FREE_VARS_r00] = "_COPY_FREE_VARS_r00",
     [_COPY_FREE_VARS_r11] = "_COPY_FREE_VARS_r11",
@@ -6518,6 +6531,8 @@ int _PyUop_num_popped(int opcode, int oparg)
             return 1;
         case _BUILD_SET:
             return oparg;
+        case _COPY_DICT:
+            return 1;
         case _BUILD_MAP:
             return oparg*2;
         case _SETUP_ANNOTATIONS:

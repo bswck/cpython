@@ -1216,6 +1216,15 @@ iterations of the loop.
       empty dictionary pre-sized to hold *count* items.
 
 
+.. opcode:: COPY_DICT
+
+   Replaces the :class:`frozendict` at ``STACK[-1]`` with a new, mutable
+   :class:`dict` containing the same keys and values. The copy is shallow.
+   Used to construct dictionaries from constant templates.
+
+   .. versionadded:: 3.16
+
+
 .. opcode:: BUILD_STRING (count)
 
    Concatenates *count* strings from the stack and pushes the resulting string

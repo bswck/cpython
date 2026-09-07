@@ -3026,5 +3026,133 @@ class OptimizeLoadFastTestCase(DirectCfgOptimizerTests):
 
 
 
+class TestConstantDicts(BytecodeTestCase):
+    def compile_dict(self, source):
+        return compile(source, "<constant dict>", "eval")
+
+    def test_sizes_and_fresh_copies(self):
+        for size in (0, 1, 2, 3, 8, 15, 16, 17, 31, 32, 64, 128, 256):
+            with self.subTest(size=size):
+                expected = {f'key{i}': i for i in range(size)}
+                code = self.compile_dict(repr(expected))
+                first, second = eval(code), eval(code)
+                self.assertIs(type(first), dict)
+                self.assertIsNot(first, second)
+                self.assertEqual(first, expected)
+                self.assertEqual(list(first.items()), list(expected.items()))
+                first['new'] = None
+                self.assertEqual(second, expected)
+                if size < 2:
+                    self.assertNotInBytecode(code, 'COPY_DICT')
+                    self.assertInBytecode(code, 'BUILD_MAP')
+                else:
+                    self.assertInBytecode(code, 'COPY_DICT')
+                    self.assertNotInBytecode(code, 'BUILD_MAP')
+                    self.assertNotInBytecode(code, 'MAP_ADD')
+                    self.assertNotInBytecode(code, 'DICT_UPDATE')
+                    template, = (c for c in code.co_consts
+                                 if type(c) is frozendict)
+                    self.assertEqual(template, expected)
+
+    def test_folded_expressions(self):
+        code = self.compile_dict("{1 + 2: -(4 + 5), (1, 2): ('a', 3 * 4)}")
+        self.assertInBytecode(code, 'COPY_DICT')
+        self.assertNotInBytecode(code, 'BUILD_MAP')
+        self.assertEqual(eval(code), {3: -9, (1, 2): ('a', 12)})
+
+    def test_duplicate_keys(self):
+        for source, expected in (
+            ("{'b': 1, 'a': 2, 'b': 3}", [('b', 3), ('a', 2)]),
+            ("{True: 'a', 1: 'b', 2: 'c'}", [(True, 'b'), (2, 'c')]),
+            ("{1: 'a', True: 'b', 2: 'c'}", [(1, 'b'), (2, 'c')]),
+        ):
+            with self.subTest(source=source):
+                code = self.compile_dict(source)
+                self.assertInBytecode(code, 'COPY_DICT')
+                items = list(eval(code).items())
+                self.assertEqual(items, expected)
+                self.assertIs(type(items[0][0]), type(expected[0][0]))
+
+    def test_constant_cache_order_and_types(self):
+        sources = (
+            "{'a': 1, 'b': 2}", "{'b': 2, 'a': 1}",
+            "{True: 1, 2: 3}", "{1: True, 2: 3}",
+            "{'a': 0.0, 'b': (True,)}", "{'a': -0.0, 'b': (1,)}",
+            "{0.0: 1, 2: 3}", "{-0.0: 1, 2: 3}",
+        )
+        code = self.compile_dict('(' + ', '.join(sources) + ')')
+        results = eval(code)
+        for source, result in zip(sources, results):
+            with self.subTest(source=source):
+                # repr exposes order, bool/int distinctions, and signed zero.
+                self.assertEqual(repr(result), repr(eval(source)))
+        templates = [c for c in code.co_consts if type(c) is frozendict]
+        self.assertEqual(len(templates), len(sources))
+
+    def test_mutable_values(self):
+        for value in ('[]', '{}', '( [], )', '{1, 2}', "{'x': 1, 'y': 2}"):
+            with self.subTest(value=value):
+                code = self.compile_dict(f"{{'a': {value}, 'b': 2}}")
+                first, second = eval(code), eval(code)
+                if value.startswith('('):
+                    self.assertIsNot(first['a'][0], second['a'][0])
+                else:
+                    self.assertIsNot(first['a'], second['a'])
+                self.assertInBytecode(code, 'BUILD_MAP')
+
+    def test_side_effects(self):
+        events = []
+        def mark(value):
+            events.append(value)
+            return value
+
+        code = self.compile_dict("{mark('a'): mark(1), 'b': mark(2)}")
+        self.assertEqual(eval(code), {'a': 1, 'b': 2})
+        self.assertEqual(events, ['a', 1, 2])
+
+    def test_failed_folding_raises_at_runtime(self):
+        for source in ("{[]: 1, 2: 3}", "{([],): 1, 2: 3}",
+                       "{{1: 2, 3: 4}: 1, 2: 3}"):
+            with self.subTest(source=source):
+                code = self.compile_dict(source)
+                with self.assertRaises(TypeError):
+                    eval(code)
+        code = self.compile_dict("{1 / 0: 1, 2: 3}")
+        with self.assertRaises(ZeroDivisionError):
+            eval(code)
+
+    def test_unpacking(self):
+        code = self.compile_dict("{**{'a': 1, 'b': 2}, 'a': 3, 'c': 4}")
+        self.assertEqual(list(eval(code).items()), [('a', 3), ('b', 2), ('c', 4)])
+        self.assertNotInBytecode(code, 'DICT_UPDATE')
+        code = self.compile_dict("{**mapping, 'a': 3, 'c': 4}")
+        self.assertEqual(eval(code, {'mapping': {'b': 2}}),
+                         {'b': 2, 'a': 3, 'c': 4})
+        self.assertInBytecode(code, 'DICT_UPDATE')
+
+    def test_rebound_builtins(self):
+        code = self.compile_dict("{'a': 1, 'b': 2}")
+        self.assertEqual(eval(code, {'dict': None, 'frozendict': None}),
+                         {'a': 1, 'b': 2})
+
+    def test_limits(self):
+        source = repr({i: i for i in range(300)})
+        code = self.compile_dict(source)
+        self.assertEqual(eval(code), {i: i for i in range(300)})
+        for template in code.co_consts:
+            if type(template) is frozendict:
+                self.assertLessEqual(len(template), 256)
+        # Do not repeatedly hash a large nested tuple while merging templates.
+        code = self.compile_dict("{0: (1,) * 256, 1: (2,) * 256, 2: (3,) * 256, 3: (4,) * 256}")
+        self.assertEqual(len(eval(code)), 4)
+        self.assertNotInBytecode(code, 'COPY_DICT')
+
+    def test_interned_keys(self):
+        code = self.compile_dict("{'identifier_a': 1, 'identifier_b': 2}")
+        template, = (c for c in code.co_consts if type(c) is frozendict)
+        for key in template:
+            self.assertIs(key, sys.intern(key))
+
+
 if __name__ == "__main__":
     unittest.main()

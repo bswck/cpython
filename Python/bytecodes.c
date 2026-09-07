@@ -2583,6 +2583,15 @@ dummy_func(
             set = PyStackRef_FromPyObjectStealMortal(set_o);
         }
 
+        inst(COPY_DICT, (template -- map)) {
+            PyObject *template_o = PyStackRef_AsPyObjectBorrow(template);
+            assert(PyFrozenDict_CheckExact(template_o));
+            PyObject *map_o = _PyDict_CopyAsDict(template_o);
+            PyStackRef_CLOSE(template);
+            ERROR_IF(map_o == NULL);
+            map = PyStackRef_FromPyObjectStealMortal(map_o);
+        }
+
         inst(BUILD_MAP, (values[oparg*2] -- map)) {
 
             PyObject *map_o = _Py_BuildMap_StackRefSteal(values, oparg);

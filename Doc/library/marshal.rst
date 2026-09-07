@@ -76,6 +76,11 @@ this module.  The following types are supported:
 
    Added format version 6, which allows marshalling :class:`frozendict`.
 
+.. versionchanged:: 3.16
+
+   Code objects containing optimized constant dictionary literals can contain
+   :class:`frozendict` constants and therefore require format version 6 or later.
+
 
 The module defines these functions:
 

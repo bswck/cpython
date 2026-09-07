@@ -2464,6 +2464,13 @@
             break;
         }
 
+        case _COPY_DICT: {
+            JitOptRef map;
+            map = sym_new_not_null(ctx);
+            stack_pointer[-1] = map;
+            break;
+        }
+
         case _BUILD_MAP: {
             JitOptRef map;
             map = sym_new_type(ctx, &PyDict_Type);
