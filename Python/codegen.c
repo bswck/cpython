@@ -621,21 +621,26 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
     ADDOP_JUMP(c, NO_LOCATION, SETUP_CLEANUP, throw_cleanup);
     ADDOP(c, NO_LOCATION, PUSH_EXC_INFO);
     // Stack: [aiterator, previous_exception, exception].
-    ADDOP_JUMP(c, loc, SETUP_FINALLY, throw_stop);
     ADDOP_I(c, loc, COPY, 3);
     ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_ASYNC_GEN_GET_THROW);
     ADDOP_I(c, loc, COPY, 1);
     ADDOP_LOAD_CONST(c, loc, Py_None);
     ADDOP_I(c, loc, IS_OP, 0);
     ADDOP_JUMP(c, loc, POP_JUMP_IF_TRUE, no_throw);
+    // Only exhaustion from calling/awaiting athrow() ends delegation.
+    // Missing methods and lookup errors do not indicate exhaustion.
+    ADDOP_JUMP(c, loc, SETUP_FINALLY, throw_stop);
+    ADDOP_I(c, loc, COPY, 1);
     ADDOP(c, loc, PUSH_NULL);
-    ADDOP_I(c, loc, COPY, 3);
+    ADDOP_I(c, loc, COPY, 4);
     ADDOP_I(c, loc, CALL, 1);
     ADDOP_I(c, loc, GET_AWAITABLE, 0);
     ADDOP(c, loc, PUSH_NULL);
     ADDOP_LOAD_CONST(c, loc, Py_None);
     ADD_YIELD_FROM(c, loc, 1);
     ADDOP(c, NO_LOCATION, POP_BLOCK);
+    ADDOP_I(c, loc, SWAP, 2);
+    ADDOP(c, loc, POP_TOP);
     ADDOP(c, NO_LOCATION, POP_BLOCK);
     ADDOP_I(c, loc, SWAP, 2);
     ADDOP(c, loc, POP_TOP);
@@ -649,6 +654,8 @@ codegen_yield_from_async(compiler *c, location loc, expr_ty e)
 
     USE_LABEL(c, throw_stop);
     ADDOP(c, NO_LOCATION, POP_BLOCK);
+    ADDOP_I(c, loc, SWAP, 2);
+    ADDOP(c, loc, POP_TOP);
     ADDOP_I(c, loc, SWAP, 2);
     ADDOP(c, loc, POP_TOP);
     ADDOP_I(c, loc, SWAP, 2);

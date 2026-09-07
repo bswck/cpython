@@ -1884,6 +1884,67 @@ class TestPEP828Extras(unittest.TestCase):
             self.assertIsNone(gen.ag_frame)
 
     @_async_test
+    async def test_injected_stop_async_iteration_is_not_exhaustion(self):
+        class Iterator:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                return 1
+
+        async def delegate():
+            try:
+                yield from Iterator()
+            except StopAsyncIteration as exception:
+                yield exception
+            else:
+                self.fail('injected exception treated as a return value')
+
+        async def uncaught_delegate():
+            yield from Iterator()
+
+        exception = StopAsyncIteration('injected failure')
+        gen = delegate()
+        self.assertEqual(await anext(gen), 1)
+        self.assertIs(await gen.athrow(exception), exception)
+        await gen.aclose()
+
+        gen = uncaught_delegate()
+        self.assertEqual(await anext(gen), 1)
+        with self.assertRaisesRegex(
+                RuntimeError, 'async generator raised StopAsyncIteration') as caught:
+            await gen.athrow(exception)
+        self.assertIs(caught.exception.__cause__, exception)
+
+    @_async_test
+    async def test_throw_lookup_exhaustion_is_not_a_return(self):
+        error = StopAsyncIteration('lookup failed')
+
+        class Iterator:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                return 1
+
+            @property
+            def athrow(self):
+                raise error
+
+        async def delegate():
+            try:
+                yield from Iterator()
+            except StopAsyncIteration as exception:
+                yield exception
+            else:
+                self.fail('lookup failure treated as a return value')
+
+        gen = delegate()
+        self.assertEqual(await anext(gen), 1)
+        self.assertIs(await gen.athrow(ValueError()), error)
+        await gen.aclose()
+
+    @_async_test
     async def test_missing_stop_async_iteration_value(self):
         class UninitializedStop(StopAsyncIteration):
             def __init__(self):
